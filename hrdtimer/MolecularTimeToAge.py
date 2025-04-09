@@ -101,12 +101,12 @@ def analyze_cohort_timing(cohort_name, bulk_tumor_df, hrd_timer_df, normal_tissu
         WGD_low = get_mean_x(float((WGD - W_err) * y_breast))
 
         # Linear model-based
-        HRD_linear = float(HRD * y_breast)
-        HRD_linear_high = float((HRD + H_err) * y_breast)
-        HRD_linear_low = float((HRD - H_err) * y_breast)
-        WGD_linear = float(WGD * y_breast)
-        WGD_linear_high = float((WGD + W_err) * y_breast)
-        WGD_linear_low = float((WGD - W_err) * y_breast)
+        HRD_linear = "NA" if (HRD * x_breast) < 0 else float(HRD * x_breast)
+        HRD_linear_high = "NA" if ((HRD + H_err) * x_breast) < 0 else float((HRD + H_err) * x_breast)
+        HRD_linear_low  = "NA" if ((HRD - H_err) * x_breast) < 0 else float((HRD - H_err) * x_breast)
+        WGD_linear = "NA" if (WGD * x_breast) < 0 else float(WGD * x_breast)
+        WGD_linear_high = "NA" if ((WGD + W_err) * x_breast) < 0 else float((WGD + W_err) * x_breast)
+        WGD_linear_low = "NA" if ((WGD - W_err) * x_breast) < 0 else float((WGD - W_err) * x_breast)
 
         results.loc[len(results)] = [
             sid, x_breast,
