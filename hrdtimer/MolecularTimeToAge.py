@@ -52,7 +52,13 @@ def analyze_cohort_timing(cohort_name, bulk_tumor_df, hrd_timer_df, normal_tissu
     nrows, ncols = -(-len(IDs) // 5), 5
     fig, axs = plt.subplots(nrows, ncols, figsize=(20, nrows * 4))
     axs = axs.flatten()
-    results = pd.DataFrame(columns=['ID','Age','WGD','WGD_low','WGD_high','HRD','HRD_low','HRD_high'])
+    results = pd.DataFrame(columns=[
+        'ID','Age',
+        'WGD','WGD_low','WGD_high',
+        'HRD','HRD_low','HRD_high',
+        'WGD_linear','WGD_linear_low','WGD_linear_high',
+        'HRD_linear','HRD_linear_low','HRD_linear_high'
+    ])
 
     for idx, sid in enumerate(IDs):
         d = merged[merged['aliquot_id'] == sid]
@@ -85,7 +91,8 @@ def analyze_cohort_timing(cohort_name, bulk_tumor_df, hrd_timer_df, normal_tissu
         def get_mean_x(target):
             ix = np.where(np.abs(y_fit - target) < 1e-3)[0]
             return np.mean(x_scaled[ix]) if ix.size else "NA"
-
+        
+        # Polynomial
         HRD_pow = get_mean_x(float(HRD * y_breast))
         HRD_high = get_mean_x(float((HRD + H_err) * y_breast))
         HRD_low = get_mean_x(float((HRD - H_err) * y_breast)) or 0
@@ -93,7 +100,21 @@ def analyze_cohort_timing(cohort_name, bulk_tumor_df, hrd_timer_df, normal_tissu
         WGD_high = get_mean_x(float((WGD + W_err) * y_breast))
         WGD_low = get_mean_x(float((WGD - W_err) * y_breast))
 
-        results.loc[len(results)] = [sid, x_breast, WGD_pow, WGD_low, WGD_high, HRD_pow, HRD_low, HRD_high]
+        # Linear model-based
+        HRD_linear = float(HRD * y_breast)
+        HRD_linear_high = float((HRD + H_err) * y_breast)
+        HRD_linear_low = float((HRD - H_err) * y_breast)
+        WGD_linear = float(WGD * y_breast)
+        WGD_linear_high = float((WGD + W_err) * y_breast)
+        WGD_linear_low = float((WGD - W_err) * y_breast)
+
+        results.loc[len(results)] = [
+            sid, x_breast,
+            WGD_pow, WGD_low, WGD_high,
+            HRD_pow, HRD_low, HRD_high,
+            WGD_linear, WGD_linear_low, WGD_linear_high,
+            HRD_linear, HRD_linear_low, HRD_linear_high
+        ]
 
         ax.set(title=sid, xlim=(0, 85), ylim=(0, 0.1), xlabel='Age', ylabel='SBS1 / G x 3000 Mb')
 
