@@ -768,3 +768,94 @@ def calculate_WGDtime_prob_bootstrapping_CTpG(sample_df, num_bootstrap=200, samp
     WDG_time_CI = (upper_bound - lower_bound)/2
 
     return N_mut_CpG_all, weighted_means, WGD_time, WDG_time_CI
+
+
+# -------------------------- HRD Time New bootstrapping method ---------------------------------
+# ------------ Changing only signature posterior probabilities in each bootstrap ---------------
+
+def generate_bootstraps(samples_dict, n_bootstraps, output_dir):
+    """
+    Perform bootstrap resampling of SBS96 mutations per sample and time classification
+    ('Early', 'Late', 'NA') to estimate signature exposures using the COSMIC v3.2 catalog.
+
+    For each bootstrap iteration:
+    - For each sample and time group, mutations are resampled using multinomial sampling
+      based on observed SBS96 mutation type frequencies.
+    - Signature exposures are inferred via likelihood-based refitting using `musical`.
+    - Posterior mutation probabilities per signature are calculated and merged with
+      the original group data.
+    - Annotated sample data are saved to per-sample CSV files.
+    - For each group label, combined exposure vectors across all samples are saved as CSV.
+
+    Parameters:
+    ----------
+    samples_dict : dict
+        Dictionary mapping sample IDs to DataFrames. Each DataFrame must contain:
+        - 'SBS96': mutation types (str)
+        - 'Classification': one of {'Early', 'Late', 'NA'}
+
+    n_bootstraps : int
+        Number of bootstrap replicates to perform.
+
+    output_dir : str
+        Path to directory where bootstrap results will be saved. Each bootstrap replicate
+        will be saved in a subdirectory named 'bootstrap_<i>'.
+
+    Output:
+    -------
+    - For each bootstrap replicate:
+        - <output_dir>/bootstrap_<i>/<sample_id>.csv:
+            Sample-level annotated mutations with posterior signature probabilities.
+        - <output_dir>/bootstrap_<i>/exposures_<label>.csv:
+            Combined exposure matrix for each group label.
+    """
+    
+    catalog = musical.load_catalog('COSMIC_v3p2_SBS_WGS')
+    catalog.restrict_catalog(tumor_type='Breast.AdenoCA', is_MMRD=False, is_PPD=False)
+    mutation_types = catalog.W.index.tolist()
+    W = catalog.W.reindex(mutation_types)
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for i in tqdm(range(1, n_bootstraps + 1), desc="Bootstrapping"):
+        boot_dir = os.path.join(output_dir, f'bootstrap_{i}')
+        os.makedirs(boot_dir, exist_ok=True)
+
+        group_exposure_dict = {'Early': [], 'Late': [], 'NA': []}
+        
+        for sample_id, df in samples_dict.items():
+            merged = []
+
+            for label in ['Early', 'Late', 'NA']:
+                group = df[df['Classification'] == label].copy()
+                if group.empty:
+                    continue
+                
+                type_probs = group['SBS96'].value_counts(normalize=True).reindex(mutation_types, fill_value=0.0)
+                sampled = np.random.multinomial(len(group), type_probs.values)
+                sampled_types = np.repeat(type_probs.index.values, sampled)
+                sampled_df = pd.DataFrame({sample_id: pd.Series(sampled_types).value_counts()
+                                           .reindex(mutation_types, fill_value=0)}, index=mutation_types)
+                sampled_df.index.name = 'Type'
+
+                exposures, _ = musical.refit.refit(sampled_df, W, method='likelihood_bidirectional', thresh=0.001)
+                exposures_norm = (exposures / exposures.sum()).iloc[:, 0]
+                exposures_norm.name = sample_id
+                exposures.name = sample_id
+                group_exposure_dict[label].append(exposures)
+
+                W_prob = W.mul(exposures_norm, axis=1)
+                prob_df = W_prob.div(W_prob.sum(axis=1), axis=0).fillna(0).rename(
+                    columns=lambda c: f'prob_{c}_boot').reset_index()
+
+                group['Type'] = group['SBS96']
+                group = group.merge(prob_df, on='Type', how='left')
+                merged.append(group)
+
+            if merged:
+                pd.concat(merged, ignore_index=True).to_csv(os.path.join(boot_dir, f"{sample_id}.csv"), index=False)
+
+        for label, exposure_list in group_exposure_dict.items():
+            if exposure_list:
+                df_exposures = pd.concat(exposure_list, axis=1).T
+                df_exposures.to_csv(os.path.join(boot_dir, f"exposures_{label}.csv"))
