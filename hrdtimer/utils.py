@@ -859,3 +859,378 @@ def generate_bootstraps(samples_dict, n_bootstraps, output_dir):
             if exposure_list:
                 df_exposures = pd.concat(exposure_list, axis=1).T
                 df_exposures.to_csv(os.path.join(boot_dir, f"exposures_{label}.csv"))
+
+def calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir, num_bootstrap=200):
+    weighted_means = np.array([])
+    N_mut_CpG_all = np.array([0, 0, 0])  # MinCN = 0, 1, 2
+
+    for i in range(1, num_bootstrap + 1):
+        # Read bootstrap file
+        file_path = os.path.join(base_dir, f"bootstrap_{i}", f"{sample_id}.csv")
+        if not os.path.exists(file_path):
+            continue  # or raise warning/log
+
+        sample_df = pd.read_csv(file_path)
+
+        # Filter for [C>T]pG mutations
+        sample_df = sample_df[sample_df['SBS96'].isin(['A[C>T]G', 'C[C>T]G', 'T[C>T]G', 'G[C>T]G'])]
+
+        t_values_bootstrap = np.array([])
+        N_mut_CpG = np.array([])
+
+        for min_cn in range(3):
+            filtered_df = sample_df[sample_df['MinCN'] == min_cn]
+            N_mut_CpG = np.append(N_mut_CpG, filtered_df.shape[0])
+            N_mut_CpG_all[min_cn] += filtered_df.shape[0]
+
+            sum_num = sum_pi = 0
+            for _, row in filtered_df.iterrows():
+                sum_num += row['prob_SBS1_boot'] * row['pSingle'] / (row['pSingle'] + row['pGain'])
+                sum_pi += row['prob_SBS1_boot']
+            pi_1 = sum_num / sum_pi if sum_pi else 0
+
+            sum_num = sum_pi = 0
+            for _, row in filtered_df.iterrows():
+                sum_num += row['prob_SBS1_boot'] * row['pGain'] / (row['pSingle'] + row['pGain'])
+                sum_pi += row['prob_SBS1_boot']
+            pi_2 = sum_num / sum_pi if sum_pi else 0
+
+            if pi_2 == 0 and pi_1 != 0:
+                t_value = 0
+            elif pi_1 + 2 * pi_2 == 0:
+                t_value = np.nan
+            else:
+                t_value = (3 * pi_2) / (pi_1 + 2 * pi_2) if min_cn == 1 else (2 * pi_2) / (pi_1 + 2 * pi_2)
+
+            t_values_bootstrap = np.append(t_values_bootstrap, t_value)
+
+        nan_indices = np.isnan(t_values_bootstrap)
+
+        if np.sum(nan_indices) == 1:
+            non_nan_means = t_values_bootstrap[~nan_indices]
+            non_nan_weights = N_mut_CpG[~nan_indices]
+            weighted_mean = np.sum(non_nan_means * non_nan_weights) / np.sum(non_nan_weights)
+        elif np.sum(nan_indices) == 2:
+            weighted_mean = t_values_bootstrap[~nan_indices][0]
+        else:
+            weighted_mean = np.sum(t_values_bootstrap * N_mut_CpG) / np.sum(N_mut_CpG)
+
+        weighted_means = np.append(weighted_means, weighted_mean)
+
+    WGD_time = np.mean(weighted_means)
+    lower_bound = np.percentile(weighted_means, 2.5)
+    upper_bound = np.percentile(weighted_means, 97.5)
+
+    WGD_time_CI_hi = upper_bound - WGD_time
+    WGD_time_CI_lo = WGD_time - lower_bound
+
+    return N_mut_CpG_all, weighted_means, WGD_time, WGD_time_CI_hi, WGD_time_CI_lo
+
+def calculate_HRD_time_p(sample_df):
+
+    # Ensure the prob_SBS3_boot_restricted column exists
+    if 'prob_SBS3_boot' not in sample_df.columns:
+        sample_df['prob_SBS3_boot'] = 0
+        
+    # Initialize result variables
+    t_values_dict = {0: None, 1: None, 2: None}
+    N_mut_dict = {0: None, 1: None, 2: None}
+    pi_2_SBS1_val = {0: None, 1:None, 2:None}
+    pi_2_SBS3_val = {0: None, 1:None, 2:None}
+    pi_1_SBS1_val = {0: None, 1:None, 2:None}
+    pi_1_SBS3_val = {0: None, 1:None, 2:None}
+    c_dict = {0: None, 1: None, 2: None}
+    c_avg_values = {0: None, 2: None}
+    Nt_SBS1_val = {0: None, 1:None, 2:None}
+    Nt_SBS3_val = {0: None, 1:None, 2:None}
+    c_avg = 0
+
+    # Define the order of MinCN values
+    min_cn_order = [0, 2, 1]
+
+    # Loop through MinCN values in the specified order
+    for min_cn in min_cn_order:
+        filtered_df = sample_df[sample_df['MinCN'] == min_cn]
+        N_mut_dict[min_cn] = filtered_df.shape[0]
+
+        # Calculate pi_1 and pi_2 for SBS1
+        sum_num_SBS1 = 0
+        sum_pi_SBS1 = 0
+        for index, row in filtered_df.iterrows():
+            sum_num_SBS1 += row['prob_SBS1_boot'] * row['pSingle'] / (row['pSingle'] + row['pGain'])
+            sum_pi_SBS1 += row['prob_SBS1_boot']
+        pi_1_SBS1 = sum_num_SBS1 / sum_pi_SBS1 if sum_pi_SBS1 != 0 else np.nan
+
+        sum_num_SBS1 = 0
+        sum_pi_SBS1 = 0
+        for index, row in filtered_df.iterrows():
+            sum_num_SBS1 += row['prob_SBS1_boot'] * row['pGain'] / (row['pSingle'] + row['pGain'])
+            sum_pi_SBS1 += row['prob_SBS1_boot']
+        pi_2_SBS1 = sum_num_SBS1 / sum_pi_SBS1 if sum_pi_SBS1 != 0 else np.nan
+
+        # Calculate pi_1 and pi_2 for SBS3
+        sum_num_SBS3 = 0
+        sum_pi_SBS3 = 0
+        for index, row in filtered_df.iterrows():
+            sum_num_SBS3 += row['prob_SBS3_boot'] * row['pSingle'] / (row['pSingle'] + row['pGain'])
+            sum_pi_SBS3 += row['prob_SBS3_boot']
+        pi_1_SBS3 = sum_num_SBS3 / sum_pi_SBS3 if sum_pi_SBS3 != 0 else np.nan
+
+        sum_num_SBS3 = 0
+        sum_pi_SBS3 = 0
+        for index, row in filtered_df.iterrows():
+            sum_num_SBS3 += row['prob_SBS3_boot'] * row['pGain'] / (row['pSingle'] + row['pGain'])
+            sum_pi_SBS3 += row['prob_SBS3_boot']
+        pi_2_SBS3 = sum_num_SBS3 / sum_pi_SBS3 if sum_pi_SBS3 != 0 else np.nan
+
+        Nt_SBS1 = np.sum(filtered_df['prob_SBS1_boot'].tolist())
+        Nt_SBS3 = np.sum(filtered_df['prob_SBS3_boot'].tolist())
+
+        # Adjust pi_2 for SBS1 using the new formula
+        pi_2_SBS1_prime = pi_2_SBS1 - (pi_2_SBS3 / pi_1_SBS3) * pi_1_SBS1 if pi_1_SBS3 != 0 else np.nan
+
+        # Calculate t_value based on MinCN using the adjusted pi_2_SBS1_prime
+        if (pi_1_SBS1 + 2 * pi_2_SBS1_prime == 0) or np.isnan(pi_2_SBS1_prime):
+            t_value = np.nan
+        else:
+            t_value = (3 * pi_2_SBS1_prime) / (pi_1_SBS1 + 2 * pi_2_SBS1) if min_cn == 1 else (2 * pi_2_SBS1_prime) / (pi_1_SBS1 + 2 * pi_2_SBS1)
+
+        t_values_dict[min_cn] = t_value
+
+        if min_cn == 0 or min_cn == 2:
+            c_dict[min_cn] = (pi_1_SBS1 * Nt_SBS1) / (pi_1_SBS3 * Nt_SBS3)
+            c_avg_values[min_cn] = c_dict[min_cn]
+
+        # Calculate weighted average of c for min_cn 0 and 2
+        if min_cn == 2:
+            c_avg_numerator = 0
+            c_avg_denominator = 0
+            if c_avg_values[0] is not None:
+                c_avg_numerator += c_avg_values[0] * N_mut_dict[0]
+                c_avg_denominator += N_mut_dict[0]
+            if c_avg_values[2] is not None:
+                c_avg_numerator += c_avg_values[2] * N_mut_dict[2]
+                c_avg_denominator += N_mut_dict[2]
+            if c_avg_denominator != 0:
+                c_avg = c_avg_numerator / c_avg_denominator
+
+        if min_cn == 1:
+            # Recalculate pi_2_SBS1_prime using the weighted average c0
+            pi_2_SBS1_prime = pi_2_SBS1 - pi_2_SBS3 * c_avg * (Nt_SBS3 / Nt_SBS1) if pi_1_SBS3 != 0 else np.nan
+            # Recalculate t_value for min_cn 1 using the adjusted pi_2_SBS1_prime
+            if (pi_1_SBS1 + 2 * pi_2_SBS1_prime == 0) or np.isnan(pi_2_SBS1_prime):
+                t_value = np.nan
+            else:
+                t_value = (3 * pi_2_SBS1_prime) / (pi_1_SBS1 + 2 * pi_2_SBS1)
+            t_values_dict[min_cn] = t_value
+
+        pi_2_SBS1_val[min_cn] = pi_2_SBS1
+        pi_2_SBS3_val[min_cn] = pi_2_SBS3
+        pi_1_SBS1_val[min_cn] = pi_1_SBS1
+        pi_1_SBS3_val[min_cn] = pi_1_SBS3
+        Nt_SBS1_val[min_cn] = Nt_SBS1
+        Nt_SBS3_val[min_cn] = Nt_SBS3
+
+
+    # Arrange the bootstrapped_matrices in the order 0, 1, 2
+    t_values = [t_values_dict[0], t_values_dict[1], t_values_dict[2]]
+    N_mut = [N_mut_dict[0], N_mut_dict[1], N_mut_dict[2]]
+    c = [c_dict[0], c_dict[1], c_dict[2]]
+    pi_2_SBS1_values = [pi_2_SBS1_val[0], pi_2_SBS1_val[1], pi_2_SBS1_val[2]]
+    pi_2_SBS3_values = [pi_2_SBS3_val[0], pi_2_SBS3_val[1], pi_2_SBS3_val[2]]
+    pi_1_SBS1_values = [pi_1_SBS1_val[0], pi_1_SBS1_val[1], pi_1_SBS1_val[2]]
+    pi_1_SBS3_values = [pi_1_SBS3_val[0], pi_1_SBS3_val[1], pi_1_SBS3_val[2]]
+    Nt_SBS1_values = [Nt_SBS1_val[0], Nt_SBS1_val[1], Nt_SBS1_val[2]]
+    Nt_SBS3_values = [Nt_SBS3_val[0], Nt_SBS3_val[1], Nt_SBS3_val[2]]
+
+    return t_values, N_mut, c_avg, c, pi_2_SBS1_values, pi_2_SBS3_values, Nt_SBS1_values, Nt_SBS3_values, pi_1_SBS1_values, pi_1_SBS3_values
+
+def calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir, num_bootstrap=200):
+    HRD_means = np.array([])
+    pi_2_SBS1 = {min_cn: [] for min_cn in range(3)}
+    pi_2_SBS3 = {min_cn: [] for min_cn in range(3)}
+    pi_1_SBS1 = {min_cn: [] for min_cn in range(3)}
+    pi_1_SBS3 = {min_cn: [] for min_cn in range(3)}
+    c_val = {min_cn: [] for min_cn in range(3)}
+    c_avg_val = np.array([])
+    Nt_SBS1 = {min_cn: [] for min_cn in range(3)}
+    Nt_SBS3 = {min_cn: [] for min_cn in range(3)}
+    N_mut_all = np.array([])
+
+    for i in range(num_bootstrap):
+        file_path = os.path.join(base_dir, f"bootstrap_{i+1}", f"{sample_id}.csv")
+        if not os.path.exists(file_path):
+            continue  # Skip missing files
+
+        bootstrap_sample = pd.read_csv(file_path)
+
+        t_values, N_mut, cavg, c, pi2SBS1, pi2SBS3, NtSBS1, NtSBS3, pi1SBS1, pi1SBS3 = calculate_HRD_time(bootstrap_sample)
+
+        t_values = np.array(t_values)
+        N_mut = np.array(N_mut)
+        nan_indices = np.isnan(t_values)
+
+        if np.sum(nan_indices) == 1:
+            non_nan_means = t_values[~nan_indices]
+            non_nan_weights = N_mut[~nan_indices]
+            weighted_mean = np.sum(non_nan_means * non_nan_weights) / np.sum(non_nan_weights)
+        elif np.sum(nan_indices) == 2:
+            non_nan_means = t_values[~nan_indices]
+            weighted_mean = non_nan_means[0]
+        else:
+            weighted_mean = np.sum(t_values * N_mut) / np.sum(N_mut)
+
+        HRD_means = np.append(HRD_means, weighted_mean)
+        N_mut_all = N_mut if i == 0 else N_mut_all  # only need to store once
+
+        for min_cn in range(3):
+            pi_2_SBS1[min_cn].append(pi2SBS1[min_cn])
+            pi_2_SBS3[min_cn].append(pi2SBS3[min_cn])
+            pi_1_SBS1[min_cn].append(pi1SBS1[min_cn])
+            pi_1_SBS3[min_cn].append(pi1SBS3[min_cn])
+            Nt_SBS1[min_cn].append(NtSBS1[min_cn])
+            Nt_SBS3[min_cn].append(NtSBS3[min_cn])
+            c_val[min_cn].append(c[min_cn])
+
+        c_avg_val = np.append(c_avg_val, cavg)
+
+    #HRD_time = np.mean(HRD_means)
+    #HRD_time_CI = (np.percentile(HRD_means, 97.5) - np.percentile(HRD_means, 2.5)) / 2
+    #HRD_time_CI_hi = np.percentile(HRD_means, 97.5) - HRD_time
+    #HRD_time_CI_lo = HRD_time - np.percentile(HRD_means, 2.5)
+
+    HRD_time = np.nanmean(HRD_means)
+    HRD_time_CI = (np.nanpercentile(HRD_means, 97.5) - np.nanpercentile(HRD_means, 2.5)) / 2
+    HRD_time_CI_hi = np.nanpercentile(HRD_means, 97.5) - HRD_time
+    HRD_time_CI_lo = HRD_time - np.nanpercentile(HRD_means, 2.5)
+
+    # Mean and std calculations
+    pi_2_SBS1_mean, pi_2_SBS1_err = [], []
+    pi_2_SBS3_mean, pi_2_SBS3_err = [], []
+    pi_1_SBS1_mean, pi_1_SBS1_err = [], []
+    pi_1_SBS3_mean, pi_1_SBS3_err = [], []
+    Nt_SBS1_mean, Nt_SBS3_mean = [], []
+    c_val_mean = []
+
+    for i in range(3):
+        c_val_mean.append(0 if i == 1 else np.nanmean(c_val[i]))
+        pi_2_SBS1_mean.append(np.nanmean(pi_2_SBS1[i]))
+        pi_2_SBS1_err.append(np.nanstd(pi_2_SBS1[i]))
+        pi_2_SBS3_mean.append(np.nanmean(pi_2_SBS3[i]))
+        pi_2_SBS3_err.append(np.nanstd(pi_2_SBS3[i]))
+        pi_1_SBS1_mean.append(np.nanmean(pi_1_SBS1[i]))
+        pi_1_SBS1_err.append(np.nanstd(pi_1_SBS1[i]))
+        pi_1_SBS3_mean.append(np.nanmean(pi_1_SBS3[i]))
+        pi_1_SBS3_err.append(np.nanstd(pi_1_SBS3[i]))
+        Nt_SBS1_mean.append(np.nanmean(Nt_SBS1[i]))
+        Nt_SBS3_mean.append(np.nanmean(Nt_SBS3[i]))
+
+    c_avg = np.nanmean(c_avg_val)
+
+    return N_mut_all, HRD_means, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, c_val_mean, c_avg, Nt_SBS1_mean, Nt_SBS3_mean, pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, pi_1_SBS1_mean, pi_1_SBS1_err, pi_1_SBS3_mean, pi_1_SBS3_err
+
+def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_path):
+
+    # Initialize containers
+    WGDTime_means, WGDTime_CpGs = {}, {}
+    WGDTime_error_hi, WGDTime_error_lo = {}, {}
+    WGDTime_CpGs_error_hi, WGDTime_CpGs_error_lo = {}, {}
+    NmutCpG = {}
+
+    HRDTime_means, HRDTime_error_hi, HRDTime_error_lo = {}, {}, {}
+    pi2SBS1_means, pi2SBS1_err = {}, {}
+    pi2SBS3_means, pi2SBS3_err = {}, {}
+    pi1SBS1_means, pi1SBS1_err = {}, {}
+    pi1SBS3_means, pi1SBS3_err = {}, {}
+    c, c_avg, NtSBS1, NtSBS3, Nmutall = {}, {}, {}, {}, {}
+
+    # WGD Time estimation loop
+    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing WGD Samples"):
+        N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo = calculate_WGDtime_prob_bootstrapping(sample_id, base_dir)
+        _, _, WGDTime_CpG, WGDTime_CpG_CI_hi, WGDTime_CpG_CI_lo = calculate_WGDtime_prob_bootstrapping_CTpG(sample_id, base_dir)
+
+        WGDTime_means[sample_id] = WGDTime
+        WGDTime_error_hi[sample_id] = WGDTime_CI_hi
+        WGDTime_error_lo[sample_id] = WGDTime_CI_lo
+
+        NmutCpG[sample_id] = N_mut_CpG.tolist()
+        WGDTime_CpGs[sample_id] = WGDTime_CpG
+        WGDTime_CpGs_error_hi[sample_id] = WGDTime_CpG_CI_hi
+        WGDTime_CpGs_error_lo[sample_id] = WGDTime_CpG_CI_lo
+
+    # HRD Time estimation loop
+    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing HRD Samples"):
+        results = calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir)
+        N_mut_all, _, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, c_val_mean, cavg, Nt_SBS1, Nt_SBS3, \
+        pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, \
+        pi_1_SBS1_mean, pi_1_SBS1_err, pi_1_SBS3_mean, pi_1_SBS3_err = results
+
+        HRDTime_means[sample_id] = HRD_time
+        HRDTime_error_hi[sample_id] = HRD_time_CI_hi
+        HRDTime_error_lo[sample_id] = HRD_time_CI_lo
+
+        pi2SBS1_means[sample_id] = pi_2_SBS1_mean
+        pi2SBS1_err[sample_id] = pi_2_SBS1_err
+        pi2SBS3_means[sample_id] = pi_2_SBS3_mean
+        pi2SBS3_err[sample_id] = pi_2_SBS3_err
+        pi1SBS1_means[sample_id] = pi_1_SBS1_mean
+        pi1SBS1_err[sample_id] = pi_1_SBS1_err
+        pi1SBS3_means[sample_id] = pi_1_SBS3_mean
+        pi1SBS3_err[sample_id] = pi_1_SBS3_err
+
+        c[sample_id] = c_val_mean 
+        c_avg[sample_id] = cavg
+        NtSBS1[sample_id] = Nt_SBS1
+        NtSBS3[sample_id] = Nt_SBS3
+        Nmutall[sample_id] = N_mut_all.tolist()
+
+    # Aggregate results
+    results = []
+    for aliquot_id in hrd_wgd_timing_samples:
+        results.append([
+            aliquot_id,
+            HRDTime_means.get(aliquot_id, "Not available"),
+            HRDTime_error_hi.get(aliquot_id, "Not available"),
+            HRDTime_error_lo.get(aliquot_id, "Not available"),
+            WGDTime_means.get(aliquot_id, "Not available"),
+            WGDTime_error_hi.get(aliquot_id, "Not available"),
+            WGDTime_error_lo.get(aliquot_id, "Not available"),
+            WGDTime_CpGs.get(aliquot_id, "Not available"),
+            pi2SBS1_means.get(aliquot_id, "Not available"),
+            pi2SBS1_err.get(aliquot_id, "Not available"),
+            pi2SBS3_means.get(aliquot_id, "Not available"),
+            pi2SBS3_err.get(aliquot_id, "Not available"),
+            pi1SBS1_means.get(aliquot_id, "Not available"),
+            pi1SBS1_err.get(aliquot_id, "Not available"),
+            pi1SBS3_means.get(aliquot_id, "Not available"),
+            pi1SBS3_err.get(aliquot_id, "Not available"),
+            c.get(aliquot_id, "Not available"),
+            c_avg.get(aliquot_id, "Not available"),
+            NtSBS1.get(aliquot_id, "Not available"),
+            NtSBS3.get(aliquot_id, "Not available"),
+            NmutCpG.get(aliquot_id, "Not available"),
+            Nmutall.get(aliquot_id, "Not available")
+        ])
+
+    # Print result table
+    print(tabulate(results, headers=[
+        "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo", "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo",
+        "WGDTime_CpG", 'pi2SBS1', 'pi2SBS1_ci', 'pi2SBS3', 'pi2SBS3_ci',
+        'pi1SBS1', 'pi1SBS1_ci', 'pi1SBS3', 'pi1SBS3_ci',
+        "c", "c21", "Nt_SBS1", "Nt_SBS3", "N_mut(C>TpG)", "N_mut_all"
+    ], tablefmt="grid"))
+
+    # Save results to CSV
+    os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
+    with open(output_csv_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo",
+            "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo",
+            "WGDTime_CpG",
+            "pi2SBS1", "pi2SBS1_ci", "pi2SBS3", "pi2SBS3_ci",
+            "pi1SBS1", "pi1SBS1_ci", "pi1SBS3", "pi1SBS3_ci",
+            "c", "c21", "Nt_SBS1", "Nt_SBS3",
+            "N_mut(C>TpG)", "N_mut_all"
+        ])
+        writer.writerows(results)
