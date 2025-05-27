@@ -917,9 +917,9 @@ def calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir, num_bootstrap=20
 
         weighted_means = np.append(weighted_means, weighted_mean)
 
-    WGD_time = np.mean(weighted_means)
-    lower_bound = np.percentile(weighted_means, 2.5)
-    upper_bound = np.percentile(weighted_means, 97.5)
+    WGD_time = np.nanmean(weighted_means)
+    lower_bound = np.nanpercentile(weighted_means, 2.5)
+    upper_bound = np.nanpercentile(weighted_means, 97.5)
 
     WGD_time_CI_hi = upper_bound - WGD_time
     WGD_time_CI_lo = WGD_time - lower_bound
@@ -946,8 +946,8 @@ def calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, base_dir, num_bootstr
             N_mut_CpG = np.append(N_mut_CpG, filtered_df.shape[0])
             N_mut_CpG_all[min_cn] += filtered_df.shape[0]
 
-            pi_1 = np.mean(filtered_df['pSingle'] / (filtered_df['pSingle'] + filtered_df['pGain'])) if not filtered_df.empty else 0
-            pi_2 = np.mean(filtered_df['pGain'] / (filtered_df['pSingle'] + filtered_df['pGain'])) if not filtered_df.empty else 0
+            pi_1 = np.nanmean(filtered_df['pSingle'] / (filtered_df['pSingle'] + filtered_df['pGain'])) if not filtered_df.empty else 0
+            pi_2 = np.nanmean(filtered_df['pGain'] / (filtered_df['pSingle'] + filtered_df['pGain'])) if not filtered_df.empty else 0
 
             if pi_2 == 0 and pi_1 != 0:
                 t_value = 0
@@ -969,13 +969,12 @@ def calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, base_dir, num_bootstr
 
         weighted_means = np.append(weighted_means, weighted_mean)
 
-    WGD_time = np.mean(weighted_means)
-    lower_bound = np.percentile(weighted_means, 2.5)
-    upper_bound = np.percentile(weighted_means, 97.5)
+    WGD_time = np.nanmean(weighted_means)
+    lower_bound = np.nanpercentile(weighted_means, 2.5)
+    upper_bound = np.nanpercentile(weighted_means, 97.5)
 
     WGD_time_CI_hi = upper_bound - WGD_time
     WGD_time_CI_lo = WGD_time - lower_bound
-
 
     return N_mut_CpG_all, weighted_means, WGD_time, WGD_time_CI_hi, WGD_time_CI_lo
 
