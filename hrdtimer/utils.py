@@ -1064,7 +1064,7 @@ def calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir, num_boots
 
         bootstrap_sample = pd.read_csv(file_path)
 
-        t_values, N_mut, cavg, c, pi2SBS1, pi2SBS3, NtSBS1, NtSBS3, pi1SBS1, pi1SBS3 = calculate_HRD_time(bootstrap_sample)
+        t_values, N_mut, cavg, c, pi2SBS1, pi2SBS3, NtSBS1, NtSBS3, pi1SBS1, pi1SBS3 = calculate_HRD_time_p(bootstrap_sample)
 
         t_values = np.array(t_values)
         N_mut = np.array(N_mut)
@@ -1146,7 +1146,7 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
 
     # WGD Time estimation loop
     for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing WGD Samples"):
-        N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo = calculate_WGDtime_prob_bootstrapping(sample_id, base_dir)
+        N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo = calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir)
         _, _, WGDTime_CpG, WGDTime_CpG_CI_hi, WGDTime_CpG_CI_lo = calculate_WGDtime_prob_bootstrapping_CTpG(sample_id, base_dir)
 
         WGDTime_means[sample_id] = WGDTime
