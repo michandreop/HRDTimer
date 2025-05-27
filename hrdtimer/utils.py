@@ -862,9 +862,9 @@ def generate_bootstraps(samples_dict, n_bootstraps, output_dir):
 
 def calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir, num_bootstrap=200):
     weighted_means = np.array([])
-    N_mut_CpG_all = np.array([0, 0, 0])  # MinCN = 0, 1, 2
 
     for i in range(1, num_bootstrap + 1):
+        N_mut_CpG_all = np.array([0, 0, 0])  # MinCN = 0, 1, 2
         # Read bootstrap file
         file_path = os.path.join(base_dir, f"bootstrap_{i}", f"{sample_id}.csv")
         if not os.path.exists(file_path):
