@@ -1,28 +1,28 @@
+# Standard Library
+import os
+import sys
+import re
+import ast
+import csv
+import shutil
+import logging
+from contextlib import redirect_stdout
+
+# Third-Party Libraries
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib as mpl
+from tqdm import tqdm
+from tabulate import tabulate
+from scipy import stats, odr
+from scipy.stats import linregress
 import vcfpy
+
+# Domain-Specific Libraries
 from SigProfilerAssignment import Analyzer as Analyze
 import musical
-import matplotlib.pyplot as plt
-import numpy as np
-import seaborn as sns
-import os
-import shutil
-import ast
-from tqdm import tqdm 
-import re
-import sys
-from scipy import stats
-from contextlib import redirect_stdout
-from tabulate import tabulate
-import csv
-from scipy.stats import linregress
-import numpy as np, pandas as pd, matplotlib.pyplot as plt
-from scipy import odr
-import numpy as np, pandas as pd, matplotlib.pyplot as plt
-
-
-import matplotlib as mpl
-import logging
 
 logging.getLogger().setLevel(logging.WARNING)
 pd.options.mode.chained_assignment = None  # Disable the warning
@@ -33,7 +33,7 @@ pd.set_option("display.max_columns", None)
 
 # -------------------- Functions Definitions -------------------------
 
-# -------------- VCF parsing/handling -----------------------
+# --------- VCF parsing/handling -----------
 def read_vcf(record):
     return {
         "Chromosome": record.CHROM,
@@ -120,7 +120,7 @@ def process_vcf_dataframe(df, time_analysis=False):
     df.rename(columns={'powr': 'pow'}, inplace=True)
     return df
 
-# -------------- HRDTimer related functions -----------------
+# --------- HRDTimer related functions -----
 
 def G(df):
     n = len(df)
@@ -926,6 +926,59 @@ def calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir, num_bootstrap=20
 
     return N_mut_CpG_all, weighted_means, WGD_time, WGD_time_CI_hi, WGD_time_CI_lo
 
+def calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, base_dir, num_bootstrap=200):
+    weighted_means = np.array([])
+    N_mut_CpG_all = np.array([0, 0, 0])
+
+    for i in range(1, num_bootstrap + 1):
+        file_path = os.path.join(base_dir, f"bootstrap_{i}", f"{sample_id}.csv")
+        if not os.path.exists(file_path):
+            continue
+
+        sample_df = pd.read_csv(file_path)
+        sample_df = sample_df[sample_df['SBS96'].isin(['A[C>T]G', 'C[C>T]G', 'T[C>T]G', 'G[C>T]G'])]
+
+        t_values_bootstrap = np.array([])
+        N_mut_CpG = np.array([])
+
+        for min_cn in range(3):
+            filtered_df = sample_df[sample_df['MinCN'] == min_cn]
+            N_mut_CpG = np.append(N_mut_CpG, filtered_df.shape[0])
+            N_mut_CpG_all[min_cn] += filtered_df.shape[0]
+
+            pi_1 = np.mean(filtered_df['pSingle'] / (filtered_df['pSingle'] + filtered_df['pGain'])) if not filtered_df.empty else 0
+            pi_2 = np.mean(filtered_df['pGain'] / (filtered_df['pSingle'] + filtered_df['pGain'])) if not filtered_df.empty else 0
+
+            if pi_2 == 0 and pi_1 != 0:
+                t_value = 0
+            elif pi_1 + 2 * pi_2 == 0:
+                t_value = np.nan
+            else:
+                t_value = (3 * pi_2) / (pi_1 + 2 * pi_2) if min_cn == 1 else (2 * pi_2) / (pi_1 + 2 * pi_2)
+
+            t_values_bootstrap = np.append(t_values_bootstrap, t_value)
+
+        nan_indices = np.isnan(t_values_bootstrap)
+
+        if np.sum(nan_indices) == 1:
+            weighted_mean = np.sum(t_values_bootstrap[~nan_indices] * N_mut_CpG[~nan_indices]) / np.sum(N_mut_CpG[~nan_indices])
+        elif np.sum(nan_indices) == 2:
+            weighted_mean = t_values_bootstrap[~nan_indices][0]
+        else:
+            weighted_mean = np.sum(t_values_bootstrap * N_mut_CpG) / np.sum(N_mut_CpG)
+
+        weighted_means = np.append(weighted_means, weighted_mean)
+
+    WGD_time = np.mean(weighted_means)
+    lower_bound = np.percentile(weighted_means, 2.5)
+    upper_bound = np.percentile(weighted_means, 97.5)
+
+    WGD_time_CI_hi = upper_bound - WGD_time
+    WGD_time_CI_lo = WGD_time - lower_bound
+
+
+    return N_mut_CpG_all, weighted_means, WGD_time, WGD_time_CI_hi, WGD_time_CI_lo
+
 def calculate_HRD_time_p(sample_df):
 
     # Ensure the prob_SBS3_boot_restricted column exists
@@ -1130,6 +1183,41 @@ def calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir, num_boots
     return N_mut_all, HRD_means, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, c_val_mean, c_avg, Nt_SBS1_mean, Nt_SBS3_mean, pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, pi_1_SBS1_mean, pi_1_SBS1_err, pi_1_SBS3_mean, pi_1_SBS3_err
 
 def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_path):
+    """
+    Run HRD and WGD timing analysis for a set of samples and save the results to a CSV file.
+
+    This function processes each sample in the input dictionary `hrd_wgd_timing_samples` to estimate
+    the timing of whole-genome duplication (WGD) and homologous recombination deficiency (HRD) events
+    based on bootstrapped mutation data. It calculates means and confidence intervals for timing estimates,
+    mutational signature proportions (SBS1, SBS3), and other related metrics. The results are printed
+    in tabular format and saved to a CSV file.
+
+    Parameters:
+    ----------
+    hrd_wgd_timing_samples : dict
+        A dictionary where keys are sample IDs to be processed.
+        
+    base_dir : str
+        The base directory path where input data for each sample is stored.
+        
+    output_csv_path : str
+        Path to the output CSV file where the aggregated timing results will be saved.
+
+    Outputs:
+    -------
+    - Prints a summary table of HRD and WGD timing estimates with associated statistics.
+    - Saves a CSV file containing the timing results and signature metrics for each sample.
+
+    For each sample, the following values are computed and recorded:
+    - HRDTime, HRDTime_ci_hi, HRDTime_ci_lo
+    - WGDTime, WGDTime_ci_hi, WGDTime_ci_lo
+    - WGDTime_CpG
+    - pi2SBS1, pi2SBS1_ci, pi2SBS3, pi2SBS3_ci
+    - pi1SBS1, pi1SBS1_ci, pi1SBS3, pi1SBS3_ci
+    - c (mean coefficient), c21 (adjusted coefficient)
+    - Nt_SBS1, Nt_SBS3 (mutation counts)
+    - N_mut(C>TpG), N_mut_all
+    """
 
     # Initialize containers
     WGDTime_means, WGDTime_CpGs = {}, {}
@@ -1147,7 +1235,7 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
     # WGD Time estimation loop
     for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing WGD Samples"):
         N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo = calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir)
-        _, _, WGDTime_CpG, WGDTime_CpG_CI_hi, WGDTime_CpG_CI_lo = calculate_WGDtime_prob_bootstrapping_CTpG(sample_id, base_dir)
+        _, _, WGDTime_CpG, WGDTime_CpG_CI_hi, WGDTime_CpG_CI_lo = calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, base_dir)
 
         WGDTime_means[sample_id] = WGDTime
         WGDTime_error_hi[sample_id] = WGDTime_CI_hi
