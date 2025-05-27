@@ -924,7 +924,14 @@ def calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir, num_bootstrap=20
     WGD_time_CI_hi = upper_bound - WGD_time
     WGD_time_CI_lo = WGD_time - lower_bound
 
-    return N_mut_CpG_all, weighted_means, WGD_time, WGD_time_CI_hi, WGD_time_CI_lo
+        # Interquartile range (IQR) bounds
+    q25 = np.nanpercentile(weighted_means, 25)
+    q75 = np.nanpercentile(weighted_means, 75)
+
+    WGD_time_IQR_hi = q75 - WGD_time
+    WGD_time_IQR_lo = WGD_time - q25
+
+    return N_mut_CpG_all, weighted_means, WGD_time, WGD_time_CI_hi, WGD_time_CI_lo, WGD_time_IQR_hi, WGD_time_IQR_lo
 
 def calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, base_dir, num_bootstrap=200):
     weighted_means = np.array([])
@@ -1156,6 +1163,13 @@ def calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir, num_boots
     HRD_time_CI_hi = np.nanpercentile(HRD_means, 97.5) - HRD_time
     HRD_time_CI_lo = HRD_time - np.nanpercentile(HRD_means, 2.5)
 
+    # Interquartile range (IQR)
+    q25 = np.nanpercentile(HRD_means, 25)
+    q75 = np.nanpercentile(HRD_means, 75)
+
+    HRD_time_IQR_hi = q75 - HRD_time
+    HRD_time_IQR_lo = HRD_time - q25
+
     # Mean and std calculations
     pi_2_SBS1_mean, pi_2_SBS1_err = [], []
     pi_2_SBS3_mean, pi_2_SBS3_err = [], []
@@ -1179,7 +1193,7 @@ def calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir, num_boots
 
     c_avg = np.nanmean(c_avg_val)
 
-    return N_mut_all, HRD_means, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, c_val_mean, c_avg, Nt_SBS1_mean, Nt_SBS3_mean, pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, pi_1_SBS1_mean, pi_1_SBS1_err, pi_1_SBS3_mean, pi_1_SBS3_err
+    return N_mut_all, HRD_means, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo,  HRD_time_IQR_hi, HRD_time_IQR_lo, c_val_mean, c_avg, Nt_SBS1_mean, Nt_SBS3_mean, pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, pi_1_SBS1_mean, pi_1_SBS1_err, pi_1_SBS3_mean, pi_1_SBS3_err
 
 def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_path):
     """
@@ -1222,9 +1236,12 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
     WGDTime_means, WGDTime_CpGs = {}, {}
     WGDTime_error_hi, WGDTime_error_lo = {}, {}
     WGDTime_CpGs_error_hi, WGDTime_CpGs_error_lo = {}, {}
+    WGDTime_error_IQR_hi, WGDTime_error_IQR_lo = {}, {}
+
     NmutCpG = {}
 
     HRDTime_means, HRDTime_error_hi, HRDTime_error_lo = {}, {}, {}
+    HRDTime_error_IQR_hi, HRDTime_error_IQR_lo = {}, {}
     pi2SBS1_means, pi2SBS1_err = {}, {}
     pi2SBS3_means, pi2SBS3_err = {}, {}
     pi1SBS1_means, pi1SBS1_err = {}, {}
@@ -1233,12 +1250,15 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
 
     # WGD Time estimation loop
     for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing WGD Samples"):
-        N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo = calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir)
+        N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo,  WGD_time_IQR_hi, WGD_time_IQR_lo = calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir)
         _, _, WGDTime_CpG, WGDTime_CpG_CI_hi, WGDTime_CpG_CI_lo = calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, base_dir)
 
         WGDTime_means[sample_id] = WGDTime
         WGDTime_error_hi[sample_id] = WGDTime_CI_hi
         WGDTime_error_lo[sample_id] = WGDTime_CI_lo
+
+        WGDTime_error_IQR_hi[sample_id] = WGD_time_IQR_hi
+        WGDTime_error_IQR_lo[sample_id] = WGD_time_IQR_lo
 
         NmutCpG[sample_id] = N_mut_CpG.tolist()
         WGDTime_CpGs[sample_id] = WGDTime_CpG
@@ -1248,13 +1268,17 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
     # HRD Time estimation loop
     for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing HRD Samples"):
         results = calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir)
-        N_mut_all, _, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, c_val_mean, cavg, Nt_SBS1, Nt_SBS3, \
+        N_mut_all, _, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, HRD_time_IQR_hi, HRD_time_IQR_lo, c_val_mean, cavg, Nt_SBS1, Nt_SBS3, \
         pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, \
         pi_1_SBS1_mean, pi_1_SBS1_err, pi_1_SBS3_mean, pi_1_SBS3_err = results
 
         HRDTime_means[sample_id] = HRD_time
         HRDTime_error_hi[sample_id] = HRD_time_CI_hi
         HRDTime_error_lo[sample_id] = HRD_time_CI_lo
+
+        HRDTime_error_IQR_hi[sample_id] = HRD_time_IQR_hi
+        HRDTime_error_IQR_lo[sample_id] = HRD_time_IQR_lo
+
 
         pi2SBS1_means[sample_id] = pi_2_SBS1_mean
         pi2SBS1_err[sample_id] = pi_2_SBS1_err
@@ -1279,9 +1303,15 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
             HRDTime_means.get(aliquot_id, "Not available"),
             HRDTime_error_hi.get(aliquot_id, "Not available"),
             HRDTime_error_lo.get(aliquot_id, "Not available"),
+            HRDTime_error_IQR_hi.get(aliquot_id, "Not available"),
+            HRDTime_error_IQR_lo.get(aliquot_id, "Not available"),
+
             WGDTime_means.get(aliquot_id, "Not available"),
             WGDTime_error_hi.get(aliquot_id, "Not available"),
             WGDTime_error_lo.get(aliquot_id, "Not available"),
+            WGDTime_error_IQR_hi.get(aliquot_id, "Not available"),
+            WGDTime_error_IQR_lo.get(aliquot_id, "Not available"),
+
             WGDTime_CpGs.get(aliquot_id, "Not available"),
             pi2SBS1_means.get(aliquot_id, "Not available"),
             pi2SBS1_err.get(aliquot_id, "Not available"),
@@ -1301,7 +1331,8 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
 
     # Print result table
     print(tabulate(results, headers=[
-        "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo", "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo",
+        "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo", "HRDTime_ci_IQR_hi", "HRDTime_ci_IQR_lo",
+        "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo", "WGDTime_ci_IQR_hi", "WGDTime_ci_IQR_lo",
         "WGDTime_CpG", 'pi2SBS1', 'pi2SBS1_ci', 'pi2SBS3', 'pi2SBS3_ci',
         'pi1SBS1', 'pi1SBS1_ci', 'pi1SBS3', 'pi1SBS3_ci',
         "c", "c21", "Nt_SBS1", "Nt_SBS3", "N_mut(C>TpG)", "N_mut_all"
@@ -1312,12 +1343,10 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
     with open(output_csv_path, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([
-            "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo",
-            "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo",
-            "WGDTime_CpG",
-            "pi2SBS1", "pi2SBS1_ci", "pi2SBS3", "pi2SBS3_ci",
-            "pi1SBS1", "pi1SBS1_ci", "pi1SBS3", "pi1SBS3_ci",
-            "c", "c21", "Nt_SBS1", "Nt_SBS3",
-            "N_mut(C>TpG)", "N_mut_all"
+            "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo", "HRDTime_ci_IQR_hi", "HRDTime_ci_IQR_lo",
+            "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo", "WGDTime_ci_IQR_hi", "WGDTime_ci_IQR_lo",
+            "WGDTime_CpG", 'pi2SBS1', 'pi2SBS1_ci', 'pi2SBS3', 'pi2SBS3_ci',
+            'pi1SBS1', 'pi1SBS1_ci', 'pi1SBS3', 'pi1SBS3_ci',
+            "c", "c21", "Nt_SBS1", "Nt_SBS3", "N_mut(C>TpG)", "N_mut_all"
         ])
         writer.writerows(results)
