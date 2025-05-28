@@ -1178,6 +1178,7 @@ def calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir, num_boots
     Nt_SBS1_mean, Nt_SBS3_mean = [], []
     c_val_mean = []
 
+    '''
     for i in range(3):
         c_val_mean.append(0 if i == 1 else np.nanmean(c_val[i]))
         pi_2_SBS1_mean.append(np.nanmean(pi_2_SBS1[i]))
@@ -1192,6 +1193,37 @@ def calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir, num_boots
         Nt_SBS3_mean.append(np.nanmean(Nt_SBS3[i]))
 
     c_avg = np.nanmean(c_avg_val)
+    '''
+
+    for i in range(3):
+        c_val_mean.append(0 if i == 1 else np.nanmean(c_val[i]))
+
+        def ci95_percentile(data):
+            data = np.array(data)
+            data = data[~np.isnan(data)]
+            if len(data) == 0:
+                return np.nan
+            lower = np.percentile(data, 2.5)
+            upper = np.percentile(data, 97.5)
+            return (upper - lower) / 2
+
+        pi_2_SBS1_mean.append(np.nanmean(pi_2_SBS1[i]))
+        pi_2_SBS1_err.append(ci95_percentile(pi_2_SBS1[i]))
+
+        pi_2_SBS3_mean.append(np.nanmean(pi_2_SBS3[i]))
+        pi_2_SBS3_err.append(ci95_percentile(pi_2_SBS3[i]))
+
+        pi_1_SBS1_mean.append(np.nanmean(pi_1_SBS1[i]))
+        pi_1_SBS1_err.append(ci95_percentile(pi_1_SBS1[i]))
+
+        pi_1_SBS3_mean.append(np.nanmean(pi_1_SBS3[i]))
+        pi_1_SBS3_err.append(ci95_percentile(pi_1_SBS3[i]))
+
+        Nt_SBS1_mean.append(np.nanmean(Nt_SBS1[i]))
+        Nt_SBS3_mean.append(np.nanmean(Nt_SBS3[i]))
+
+    c_avg = np.nanmean(c_avg_val)
+
 
     return N_mut_all, HRD_means, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo,  HRD_time_IQR_hi, HRD_time_IQR_lo, c_val_mean, c_avg, Nt_SBS1_mean, Nt_SBS3_mean, pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, pi_1_SBS1_mean, pi_1_SBS1_err, pi_1_SBS3_mean, pi_1_SBS3_err
 
