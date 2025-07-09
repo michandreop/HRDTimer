@@ -163,7 +163,7 @@ def process_vcfs_early_late(input_folder, output_folder, organ_csv_path, time_an
             os.makedirs(folder, exist_ok=True)
 
     # Process VCF files in the input folder
-    for filename in tqdm([f for f in os.listdir(input_folder) if f.endswith(".vcf")], desc="Processing VCFs"):
+    for filename in tqdm([f for f in os.listdir(input_folder) if f.endswith(".vcf")], desc="Processing VCFs", file=sys.stdout):
         vcf_path = os.path.join(input_folder, filename)
         aliquot_id = filename.split(".")[0]
         organ = organ_lookup.get(aliquot_id)
@@ -394,7 +394,7 @@ def prepare_samples_for_timing(vcf_folder_path):
         print(f'Processing {subfolder} samples:')
 
         # Process VCF files
-        for filename in tqdm([f for f in os.listdir(subfolder_path) if f.endswith(".vcf")], desc="Processing Files"):
+        for filename in tqdm([f for f in os.listdir(subfolder_path) if f.endswith(".vcf")], desc="Processing Files",  file=sys.stdout):
             sample_id = filename.split('_')[0]
             vcf_file_path = os.path.join(subfolder_path, filename)
 
@@ -979,7 +979,7 @@ def generate_bootstraps(samples_dict, n_bootstraps, output_dir):
     
     os.makedirs(output_dir, exist_ok=True)
     
-    for i in tqdm(range(1, n_bootstraps + 1), desc="Bootstrapping"):
+    for i in tqdm(range(1, n_bootstraps + 1), desc="Bootstrapping", file=sys.stdout):
         boot_dir = os.path.join(output_dir, f'bootstrap_{i}')
         os.makedirs(boot_dir, exist_ok=True)
 
@@ -1446,7 +1446,7 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
     c, c_avg, NtSBS1, NtSBS3, Nmutall = {}, {}, {}, {}, {}
 
     # WGD Time estimation loop
-    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing WGD Samples"):
+    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing WGD Samples",  file=sys.stdout):
         N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo,  WGD_time_IQR_hi, WGD_time_IQR_lo = calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir)
         _, _, WGDTime_CpG, WGDTime_CpG_CI_hi, WGDTime_CpG_CI_lo = calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, base_dir)
 
@@ -1463,7 +1463,7 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
         WGDTime_CpGs_error_lo[sample_id] = WGDTime_CpG_CI_lo
 
     # HRD Time estimation loop
-    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing HRD Samples"):
+    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Processing HRD Samples", file=sys.stdout):
         results = calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir)
         N_mut_all, _, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, HRD_time_IQR_hi, HRD_time_IQR_lo, c_val_mean, cavg, Nt_SBS1, Nt_SBS3, \
         pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, \
@@ -1591,7 +1591,7 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, bootstraps_dir, output_c
     c, c_avg, NtSBS1, NtSBS3, Nmutall = {}, {}, {}, {}, {}
 
     # WGD Time estimation loop
-    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Timing WGD"):
+    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Timing WGD", file=sys.stdout):
         N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo,  WGD_time_IQR_hi, WGD_time_IQR_lo = calculate_WGDtime_prob_bootstrapping_p(sample_id, bootstraps_dir)
         _, _, WGDTime_CpG, WGDTime_CpG_CI_hi, WGDTime_CpG_CI_lo = calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, bootstraps_dir)
 
@@ -1607,7 +1607,7 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, bootstraps_dir, output_c
         WGDTime_CpGs_error_lo[sample_id] = WGDTime_CpG_CI_lo
 
     # HRD Time estimation loop
-    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Timing HRD"):
+    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Timing HRD", file=sys.stdout):
         results = calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, bootstraps_dir)
         N_mut_all, _, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, HRD_time_IQR_hi, HRD_time_IQR_lo, c_val_mean, cavg, Nt_SBS1, Nt_SBS3, \
         pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, \
