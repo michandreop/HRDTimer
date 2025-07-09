@@ -31,17 +31,9 @@ mpl.rcParams['font.size'] = 13
 
 pd.set_option("display.max_columns", None)
 
-# Create a wrapper around tqdm that sets file=sys.stdout if not provided
-class TQDMStdout(tqdm):
-    def __init__(self, *args, **kwargs):
-        kwargs.setdefault('file', sys.stdout)
-        super().__init__(*args, **kwargs)
-
-# Monkey patch tqdm globally
-import builtins
-import tqdm as tqdm_module
-tqdm_module.tqdm = TQDMStdout
-builtins.tqdm = TQDMStdout  # Optional: if some packages use `tqdm` from builtins
+# Disable all progress bars globally
+tqdm._instances.clear()
+tqdm.disable = True
 
 
 # -------------------- Functions Definitions -------------------------
