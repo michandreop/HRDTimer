@@ -889,6 +889,49 @@ def add_signature_probabilities(samples_dict):
 
     return updated_samples_dict
 
+def get_signature_exposures(samples_dict):
+    # Load and restrict the COSMIC signature catalog
+    catalog = musical.load_catalog('COSMIC_v3p2_SBS_WGS')
+    catalog.restrict_catalog(tumor_type='Breast.AdenoCA', is_MMRD=False, is_PPD=False)
+    
+    mutation_types = catalog.W.index.tolist()
+    W = catalog.W.reindex(mutation_types)
+
+    # Dictionary to accumulate summed exposures per sample
+    summed_exposures = {}
+
+    for sample_id, df in samples_dict.items():
+        exposures_sum = None
+
+        for classification in ['Early', 'Late', 'NA']:
+            group = df[df['Classification'] == classification]
+            if group.empty:
+                continue
+
+            counts = group['SBS96'].value_counts().reindex(mutation_types, fill_value=0)
+            count_df = pd.DataFrame({sample_id: counts})
+            count_df.index.name = 'Type'
+
+            exposures, _ = musical.refit.refit(count_df, W, method='likelihood_bidirectional', thresh=0.001)
+            exposures_raw = exposures.iloc[:, 0]
+
+            if exposures_sum is None:
+                exposures_sum = exposures_raw
+            else:
+                exposures_sum = exposures_sum.add(exposures_raw, fill_value=0)
+
+        if exposures_sum is None:
+            # No data for any classification, fill with zeros
+            exposures_sum = pd.Series(0, index=mutation_types, name=sample_id)
+
+        summed_exposures[sample_id] = exposures_sum
+
+    exposures_matrix = pd.DataFrame(summed_exposures)
+    # Keep only signatures with at least one non-zero exposure across samples
+    exposures_matrix = exposures_matrix.loc[(exposures_matrix != 0).any(axis=1)]
+
+    return exposures_matrix
+
 # -------------------------- HRD Time New bootstrapping method ---------------------------------
 # ------------ Changing only signature posterior probabilities in each bootstrap ---------------
 
