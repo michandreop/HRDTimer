@@ -31,11 +31,6 @@ mpl.rcParams['font.size'] = 13
 
 pd.set_option("display.max_columns", None)
 
-# Disable all progress bars globally
-tqdm._instances.clear()
-tqdm.disable = True
-
-
 # -------------------- Functions Definitions -------------------------
 
 # --------- VCF parsing/handling -----------
@@ -229,7 +224,7 @@ def process_vcfs_early_late(input_folder, output_folder, organ_csv_path, time_an
     written_folders = set()
 
     # Process VCF files in the input folder
-    for filename in tqdm([f for f in os.listdir(input_folder) if f.endswith(".vcf")], desc="Processing VCFs"):
+    for filename in tqdm([f for f in os.listdir(input_folder) if f.endswith(".vcf")], desc="Processing VCFs",  file=sys.stdout):
         vcf_path = os.path.join(input_folder, filename)
         aliquot_id = filename.split(".")[0]
         organ = organ_lookup.get(aliquot_id)
