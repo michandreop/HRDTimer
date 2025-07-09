@@ -2,3 +2,10 @@
 *.pyc
 __pycache__/
 temp/
+raw_input_data/
+HRDTimer_PreProcess/
+example_data/bootstrapping
+to_remove/
+notebooks/paper_figures/Fig4_scNanoSeqSBS1.ipynb
+scNanoSeq_Michael/
+data_scNanoSeq/

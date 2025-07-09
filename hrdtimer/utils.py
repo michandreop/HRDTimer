@@ -144,7 +144,7 @@ def process_vcfs_early_late(input_folder, output_folder, organ_csv_path, time_an
     """
     
     organ_df = pd.read_csv(organ_csv_path)
-    organ_lookup = organ_df.set_index('aliquot_id')['organ'].to_dict()
+    organ_lookup = organ_df.set_index('sample')['organ'].to_dict()
 
     # Predefine output folders for each organ and CLS type
     organ_folders = {
@@ -189,6 +189,80 @@ def process_vcfs_early_late(input_folder, output_folder, organ_csv_path, time_an
             if not df.empty:
                 output_vcf = os.path.join(organ_folders[organ]["timing" if time_analysis else "all_mut"], cls, f"{aliquot_id}_{cls.lower()}.vcf")
                 dataframe_to_vcf(df, output_vcf)
+
+def process_vcfs_early_late(input_folder, output_folder, organ_csv_path, time_analysis=False, verbose=False):
+    """
+    Process all VCF files in the input folder and save the processed files in the output folder.
+
+    Args:
+    - input_folder (str): Path to the folder containing VCF files.
+    - output_folder (str): Path to the folder where processed VCF files will be saved.
+    - organ_csv_path (str): Path to the CSV file containing organ information.
+    - time_analysis (bool): If True, create a 'timing' folder; otherwise, create 'all_mut' folder.
+    """
+
+    organ_df = pd.read_csv(organ_csv_path)
+    organ_lookup = organ_df.set_index('sample')['organ'].to_dict()
+    created_folders = set()
+
+    # Predefine output folders for each organ and CLS type
+    organ_folders = {
+        organ: {
+            "timing" if time_analysis else "all_mut": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut"),
+            "Early": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut", "Early"),
+            "Late": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut", "Late"),
+            "NA": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut", "NA")
+        }
+        for organ in organ_df['organ'].unique()
+    }
+
+    # Create all required folders
+    for folders in organ_folders.values():
+        for folder in folders.values():
+            os.makedirs(folder, exist_ok=True)
+
+    written_folders = set()
+
+    # Process VCF files in the input folder
+    for filename in tqdm([f for f in os.listdir(input_folder) if f.endswith(".vcf")], desc="Processing VCFs"):
+        vcf_path = os.path.join(input_folder, filename)
+        aliquot_id = filename.split(".")[0]
+        organ = organ_lookup.get(aliquot_id)
+
+        if not organ:
+            continue
+
+        # Process VCF
+        sample = vcf_to_dataframe(vcf_path)
+        if time_analysis:
+            sample = process_vcf_dataframe(sample, time_analysis=True)
+        else:
+            sample = process_vcf_dataframe(sample)
+
+        cls_groups = {
+            "Early": sample[sample['CLS'] == 'early'],
+            "Late": sample[sample['CLS'] == 'late'],
+            "NA": sample[sample['CLS'] == 'NA']
+        }
+
+        for cls, df in cls_groups.items():
+            if not df.empty:
+                output_vcf = os.path.join(
+                    organ_folders[organ]["timing" if time_analysis else "all_mut"], cls, f"{aliquot_id}_{cls.lower()}.vcf"
+                )
+                dataframe_to_vcf(df, output_vcf)
+                written_folders.add(os.path.dirname(output_vcf))
+
+    # Cleanup: remove any empty organ folders (and subfolders)
+    for organ in organ_folders:
+        base_dir = os.path.join(output_folder, organ)
+        if not any(
+            written_folder.startswith(os.path.join(output_folder, organ)) for written_folder in written_folders
+        ):
+            if os.path.exists(base_dir):
+                shutil.rmtree(base_dir)
+                if verbose:
+                    print(f"Removed empty folder: {base_dir}")
 
 def save_probabilities(H_reduced_normalized, W_reduced, output_dir):
     # Create a directory to store probability files if it doesn't exist
@@ -279,7 +353,6 @@ def run_Signature_Analysis(parent_folder, genome_build):
                                    input_type="vcf", context_type="96",
                                    collapse_to_SBS96=False, cosmic_version=3.2, exome=False,
                                    genome_build=genome_build,
-                                   signature_database='breast_sig_db.txt',
                                    exclude_signature_subgroups=None, export_probabilities=False,
                                    export_probabilities_per_mutation=False, make_plots=False,
                                    sample_reconstruction_plots=False, verbose=False)
@@ -769,6 +842,52 @@ def calculate_WGDtime_prob_bootstrapping_CTpG(sample_df, num_bootstrap=200, samp
 
     return N_mut_CpG_all, weighted_means, WGD_time, WDG_time_CI
 
+def add_signature_probabilities(samples_dict):
+    # Load and restrict the COSMIC signature catalog
+    catalog = musical.load_catalog('COSMIC_v3p2_SBS_WGS')
+    catalog.restrict_catalog(tumor_type='Breast.AdenoCA', is_MMRD=False, is_PPD=False)
+    
+    mutation_types = catalog.W.index.tolist()
+    W = catalog.W.reindex(mutation_types)
+
+    updated_samples_dict = {}
+
+    for sample_id, df in samples_dict.items():
+        merged = []
+
+        for label in ['Early', 'Late', 'NA']:
+            group = df[df['Classification'] == label].copy()
+            if group.empty:
+                continue
+
+            # Count actual SBS96 mutation types directly
+            counts = group['SBS96'].value_counts().reindex(mutation_types, fill_value=0)
+            count_df = pd.DataFrame({sample_id: counts})
+            count_df.index.name = 'Type'
+
+            # Refit exposures to the actual mutation profile
+            exposures, _ = musical.refit.refit(count_df, W, method='likelihood_bidirectional', thresh=0.001)
+            exposures_norm = (exposures / exposures.sum()).iloc[:, 0]  # Normalize exposures
+
+            # Compute signature probabilities per mutation type
+            W_weighted = W.mul(exposures_norm, axis=1)
+            W_probs = W_weighted.div(W_weighted.sum(axis=1), axis=0).fillna(0).reset_index()
+
+            # Rename signature columns to have 'prob_' prefix
+            W_probs = W_probs.rename(columns={col: f"prob_{col}" for col in W.columns})
+
+            # Merge back into the group-level mutation data
+            group = group.merge(W_probs, left_on='SBS96', right_on='Type', how='left')
+            group.drop(columns=['Type'], inplace=True)
+
+            merged.append(group)
+
+        if merged:
+            updated_samples_dict[sample_id] = pd.concat(merged, ignore_index=True)
+        else:
+            updated_samples_dict[sample_id] = df.copy()  # fallback if nothing was merged
+
+    return updated_samples_dict
 
 # -------------------------- HRD Time New bootstrapping method ---------------------------------
 # ------------ Changing only signature posterior probabilities in each bootstrap ---------------
@@ -885,13 +1004,13 @@ def calculate_WGDtime_prob_bootstrapping_p(sample_id, base_dir, num_bootstrap=20
 
             sum_num = sum_pi = 0
             for _, row in filtered_df.iterrows():
-                sum_num += row['prob_SBS1_boot'] * row['pSingle'] / (row['pSingle'] + row['pGain'])
+                sum_num += row['prob_SBS1_boot'] * row['pSingle']
                 sum_pi += row['prob_SBS1_boot']
             pi_1 = sum_num / sum_pi if sum_pi else 0
 
             sum_num = sum_pi = 0
             for _, row in filtered_df.iterrows():
-                sum_num += row['prob_SBS1_boot'] * row['pGain'] / (row['pSingle'] + row['pGain'])
+                sum_num += row['prob_SBS1_boot'] * row['pGain']
                 sum_pi += row['prob_SBS1_boot']
             pi_2 = sum_num / sum_pi if sum_pi else 0
 
@@ -1012,18 +1131,19 @@ def calculate_HRD_time_p(sample_df):
         filtered_df = sample_df[sample_df['MinCN'] == min_cn]
         N_mut_dict[min_cn] = filtered_df.shape[0]
 
+
         # Calculate pi_1 and pi_2 for SBS1
         sum_num_SBS1 = 0
         sum_pi_SBS1 = 0
         for index, row in filtered_df.iterrows():
-            sum_num_SBS1 += row['prob_SBS1_boot'] * row['pSingle'] / (row['pSingle'] + row['pGain'])
+            sum_num_SBS1 += row['prob_SBS1_boot'] * row['pSingle'] 
             sum_pi_SBS1 += row['prob_SBS1_boot']
         pi_1_SBS1 = sum_num_SBS1 / sum_pi_SBS1 if sum_pi_SBS1 != 0 else np.nan
 
         sum_num_SBS1 = 0
         sum_pi_SBS1 = 0
         for index, row in filtered_df.iterrows():
-            sum_num_SBS1 += row['prob_SBS1_boot'] * row['pGain'] / (row['pSingle'] + row['pGain'])
+            sum_num_SBS1 += row['prob_SBS1_boot'] * row['pGain'] 
             sum_pi_SBS1 += row['prob_SBS1_boot']
         pi_2_SBS1 = sum_num_SBS1 / sum_pi_SBS1 if sum_pi_SBS1 != 0 else np.nan
 
@@ -1031,14 +1151,14 @@ def calculate_HRD_time_p(sample_df):
         sum_num_SBS3 = 0
         sum_pi_SBS3 = 0
         for index, row in filtered_df.iterrows():
-            sum_num_SBS3 += row['prob_SBS3_boot'] * row['pSingle'] / (row['pSingle'] + row['pGain'])
+            sum_num_SBS3 += row['prob_SBS3_boot'] * row['pSingle'] 
             sum_pi_SBS3 += row['prob_SBS3_boot']
         pi_1_SBS3 = sum_num_SBS3 / sum_pi_SBS3 if sum_pi_SBS3 != 0 else np.nan
 
         sum_num_SBS3 = 0
         sum_pi_SBS3 = 0
         for index, row in filtered_df.iterrows():
-            sum_num_SBS3 += row['prob_SBS3_boot'] * row['pGain'] / (row['pSingle'] + row['pGain'])
+            sum_num_SBS3 += row['prob_SBS3_boot'] * row['pGain'] 
             sum_pi_SBS3 += row['prob_SBS3_boot']
         pi_2_SBS3 = sum_num_SBS3 / sum_pi_SBS3 if sum_pi_SBS3 != 0 else np.nan
 
@@ -1158,8 +1278,10 @@ def calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, base_dir, num_boots
     #HRD_time_CI_hi = np.percentile(HRD_means, 97.5) - HRD_time
     #HRD_time_CI_lo = HRD_time - np.percentile(HRD_means, 2.5)
 
-    HRD_time = np.nanmean(HRD_means)
+    
     HRD_time_CI = (np.nanpercentile(HRD_means, 97.5) - np.nanpercentile(HRD_means, 2.5)) / 2
+
+    HRD_time = np.nanmean(HRD_means)
     HRD_time_CI_hi = np.nanpercentile(HRD_means, 97.5) - HRD_time
     HRD_time_CI_lo = HRD_time - np.nanpercentile(HRD_means, 2.5)
 
@@ -1362,13 +1484,13 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
         ])
 
     # Print result table
-    print(tabulate(results, headers=[
-        "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo", "HRDTime_ci_IQR_hi", "HRDTime_ci_IQR_lo",
-        "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo", "WGDTime_ci_IQR_hi", "WGDTime_ci_IQR_lo",
-        "WGDTime_CpG", 'pi2SBS1', 'pi2SBS1_ci', 'pi2SBS3', 'pi2SBS3_ci',
-        'pi1SBS1', 'pi1SBS1_ci', 'pi1SBS3', 'pi1SBS3_ci',
-        "c", "c21", "Nt_SBS1", "Nt_SBS3", "N_mut(C>TpG)", "N_mut_all"
-    ], tablefmt="grid"))
+    #print(tabulate(results, headers=[
+    #    "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo", "HRDTime_ci_IQR_hi", "HRDTime_ci_IQR_lo",
+    #    "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo", "WGDTime_ci_IQR_hi", "WGDTime_ci_IQR_lo",
+    #    "WGDTime_CpG", 'pi2SBS1', 'pi2SBS1_ci', 'pi2SBS3', 'pi2SBS3_ci',
+    #    'pi1SBS1', 'pi1SBS1_ci', 'pi1SBS3', 'pi1SBS3_ci',
+    #    "c", "c21", "Nt_SBS1", "Nt_SBS3", "N_mut(C>TpG)", "N_mut_all"
+    #], tablefmt="grid"))
 
     # Save results to CSV
     os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
@@ -1382,3 +1504,139 @@ def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, base_dir, output_csv_pat
             "c", "c21", "Nt_SBS1", "Nt_SBS3", "N_mut(C>TpG)", "N_mut_all"
         ])
         writer.writerows(results)
+
+def run_HRD_WGD_timing_analysis(hrd_wgd_timing_samples, bootstraps_dir, output_csv_path=None):
+    """
+    Run HRD and WGD timing analysis for a set of samples and save the results to a CSV file.
+
+    This function processes each sample in the input dictionary `hrd_wgd_timing_samples` to estimate
+    the timing of whole-genome duplication (WGD) and homologous recombination deficiency (HRD) events
+    based on bootstrapped mutation data. It calculates means and confidence intervals for timing estimates,
+    mutational signature proportions (SBS1, SBS3), and other related metrics. The results are printed
+    in tabular format and saved to a CSV file.
+
+    Parameters:
+    ----------
+    hrd_wgd_timing_samples : dict
+        A dictionary where keys are sample IDs to be processed.
+        
+    bootstraps_dir : str
+        The directory path where input bootstrapped data for each sample is stored.
+        
+    output_csv_path : str
+        Path to the output CSV file where the aggregated timing results will be saved.
+
+    Returns:
+    -------
+    pandas.DataFrame
+        A DataFrame containing the full set of results per sample.
+    """
+
+    # Initialize containers
+    WGDTime_means, WGDTime_CpGs = {}, {}
+    WGDTime_error_hi, WGDTime_error_lo = {}, {}
+    WGDTime_CpGs_error_hi, WGDTime_CpGs_error_lo = {}, {}
+    WGDTime_error_IQR_hi, WGDTime_error_IQR_lo = {}, {}
+    NmutCpG = {}
+
+    HRDTime_means, HRDTime_error_hi, HRDTime_error_lo = {}, {}, {}
+    HRDTime_error_IQR_hi, HRDTime_error_IQR_lo = {}, {}
+    pi2SBS1_means, pi2SBS1_err = {}, {}
+    pi2SBS3_means, pi2SBS3_err = {}, {}
+    pi1SBS1_means, pi1SBS1_err = {}, {}
+    pi1SBS3_means, pi1SBS3_err = {}, {}
+    c, c_avg, NtSBS1, NtSBS3, Nmutall = {}, {}, {}, {}, {}
+
+    # WGD Time estimation loop
+    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Timing WGD"):
+        N_mut_CpG, _, WGDTime, WGDTime_CI_hi, WGDTime_CI_lo,  WGD_time_IQR_hi, WGD_time_IQR_lo = calculate_WGDtime_prob_bootstrapping_p(sample_id, bootstraps_dir)
+        _, _, WGDTime_CpG, WGDTime_CpG_CI_hi, WGDTime_CpG_CI_lo = calculate_WGDtime_prob_bootstrapping_CTpG_p(sample_id, bootstraps_dir)
+
+        WGDTime_means[sample_id] = WGDTime
+        WGDTime_error_hi[sample_id] = WGDTime_CI_hi
+        WGDTime_error_lo[sample_id] = WGDTime_CI_lo
+        WGDTime_error_IQR_hi[sample_id] = WGD_time_IQR_hi
+        WGDTime_error_IQR_lo[sample_id] = WGD_time_IQR_lo
+
+        NmutCpG[sample_id] = N_mut_CpG.tolist()
+        WGDTime_CpGs[sample_id] = WGDTime_CpG
+        WGDTime_CpGs_error_hi[sample_id] = WGDTime_CpG_CI_hi
+        WGDTime_CpGs_error_lo[sample_id] = WGDTime_CpG_CI_lo
+
+    # HRD Time estimation loop
+    for sample_id in tqdm(hrd_wgd_timing_samples.keys(), desc="Timing HRD"):
+        results = calculate_HRDtime_prob_bootstrapping_from_dir(sample_id, bootstraps_dir)
+        N_mut_all, _, HRD_time, HRD_time_CI_hi, HRD_time_CI_lo, HRD_time_IQR_hi, HRD_time_IQR_lo, c_val_mean, cavg, Nt_SBS1, Nt_SBS3, \
+        pi_2_SBS1_mean, pi_2_SBS1_err, pi_2_SBS3_mean, pi_2_SBS3_err, \
+        pi_1_SBS1_mean, pi_1_SBS1_err, pi_1_SBS3_mean, pi_1_SBS3_err = results
+
+        HRDTime_means[sample_id] = HRD_time
+        HRDTime_error_hi[sample_id] = HRD_time_CI_hi
+        HRDTime_error_lo[sample_id] = HRD_time_CI_lo
+        HRDTime_error_IQR_hi[sample_id] = HRD_time_IQR_hi
+        HRDTime_error_IQR_lo[sample_id] = HRD_time_IQR_lo
+
+        pi2SBS1_means[sample_id] = pi_2_SBS1_mean
+        pi2SBS1_err[sample_id] = pi_2_SBS1_err
+        pi2SBS3_means[sample_id] = pi_2_SBS3_mean
+        pi2SBS3_err[sample_id] = pi_2_SBS3_err
+        pi1SBS1_means[sample_id] = pi_1_SBS1_mean
+        pi1SBS1_err[sample_id] = pi_1_SBS1_err
+        pi1SBS3_means[sample_id] = pi_1_SBS3_mean
+        pi1SBS3_err[sample_id] = pi_1_SBS3_err
+
+        c[sample_id] = c_val_mean 
+        c_avg[sample_id] = cavg
+        NtSBS1[sample_id] = Nt_SBS1
+        NtSBS3[sample_id] = Nt_SBS3
+        Nmutall[sample_id] = N_mut_all.tolist()
+
+    # Aggregate results
+    results = []
+    for aliquot_id in hrd_wgd_timing_samples:
+        results.append([
+            aliquot_id,
+            HRDTime_means.get(aliquot_id, "Not available"),
+            HRDTime_error_hi.get(aliquot_id, "Not available"),
+            HRDTime_error_lo.get(aliquot_id, "Not available"),
+            HRDTime_error_IQR_hi.get(aliquot_id, "Not available"),
+            HRDTime_error_IQR_lo.get(aliquot_id, "Not available"),
+            WGDTime_means.get(aliquot_id, "Not available"),
+            WGDTime_error_hi.get(aliquot_id, "Not available"),
+            WGDTime_error_lo.get(aliquot_id, "Not available"),
+            WGDTime_error_IQR_hi.get(aliquot_id, "Not available"),
+            WGDTime_error_IQR_lo.get(aliquot_id, "Not available"),
+            WGDTime_CpGs.get(aliquot_id, "Not available"),
+            pi2SBS1_means.get(aliquot_id, "Not available"),
+            pi2SBS1_err.get(aliquot_id, "Not available"),
+            pi2SBS3_means.get(aliquot_id, "Not available"),
+            pi2SBS3_err.get(aliquot_id, "Not available"),
+            pi1SBS1_means.get(aliquot_id, "Not available"),
+            pi1SBS1_err.get(aliquot_id, "Not available"),
+            pi1SBS3_means.get(aliquot_id, "Not available"),
+            pi1SBS3_err.get(aliquot_id, "Not available"),
+            c.get(aliquot_id, "Not available"),
+            c_avg.get(aliquot_id, "Not available"),
+            NtSBS1.get(aliquot_id, "Not available"),
+            NtSBS3.get(aliquot_id, "Not available"),
+            NmutCpG.get(aliquot_id, "Not available"),
+            Nmutall.get(aliquot_id, "Not available")
+        ])
+
+    # Write to CSV
+    headers = [
+        "ID", "HRDTime", "HRDTime_ci_hi", "HRDTime_ci_lo", "HRDTime_ci_IQR_hi", "HRDTime_ci_IQR_lo",
+        "WGDTime", "WGDTime_ci_hi", "WGDTime_ci_lo", "WGDTime_ci_IQR_hi", "WGDTime_ci_IQR_lo",
+        "WGDTime_CpG", 'pi2SBS1', 'pi2SBS1_ci', 'pi2SBS3', 'pi2SBS3_ci',
+        'pi1SBS1', 'pi1SBS1_ci', 'pi1SBS3', 'pi1SBS3_ci',
+        "c", "c21", "Nt_SBS1", "Nt_SBS3", "N_mut(C>TpG)", "N_mut_all"
+    ]
+    if output_csv_path:
+        os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
+        with open(output_csv_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(headers)
+            writer.writerows(results)
+
+    # Return a DataFrame for further use
+    return pd.DataFrame(results, columns=headers)
