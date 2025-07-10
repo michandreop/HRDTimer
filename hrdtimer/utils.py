@@ -1015,7 +1015,7 @@ def plot_sbs1_vs_age(samples_dict, cohort_name, base_signature_dir, metadata_csv
     """
 
     # Compute genome size G
-    G_values = {sample_id: HRDTimerUtils.G(df) for sample_id, df in samples_dict.items()}
+    G_values = {sample_id: G(df) for sample_id, df in samples_dict.items()}
     G_df = pd.DataFrame.from_dict(G_values, orient='index', columns=['G']).reset_index()
     G_df.rename(columns={'index': 'sample'}, inplace=True)
 
