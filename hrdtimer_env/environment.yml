@@ -1,0 +1,17 @@
+name: hrdtimer_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy>=1.26.4
+  - pandas>=2.2.2
+  - matplotlib>=3.8.4
+  - seaborn>=0.12.2
+  - tqdm>=4.66.4
+  - tabulate>=0.9.0
+  - scipy>=1.13.1
+  - pip
+  - pip:
+      - vcfpy>=0.13.6
+      - SigProfilerAssignment>=1.1.6.2
