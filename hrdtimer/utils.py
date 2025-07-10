@@ -19,6 +19,7 @@ from tabulate import tabulate
 from scipy import stats, odr
 from scipy.stats import linregress
 import vcfpy
+from matplotlib.colors import to_rgba
 
 # Domain-Specific Libraries
 from SigProfilerAssignment import Analyzer as Analyze
@@ -932,6 +933,128 @@ def get_signature_exposures(samples_dict):
 
     return exposures_matrix
 
+def plot_sbs1_CpG_boxplot(
+    cohort,
+    sample_ids_csv_path,
+    base_dir,
+    output_path,
+    contexts=['A[C>T]G', 'C[C>T]G', 'G[C>T]G', 'T[C>T]G'],
+    sbs_column='SBS1',
+    figsize=(3, 4)
+):
+    # Load valid sample IDs
+    ids_to_include = pd.read_csv(sample_ids_csv_path)['ID'].tolist()
+
+    # Set Early and Late dirs
+    dirs = {
+        'Early': os.path.join(base_dir, 'Early/probabilities'),
+        'Late': os.path.join(base_dir, 'Late/probabilities')
+    }
+
+    def process_file(file_path, period):
+        df = pd.read_csv(file_path, sep='\t')
+        df['Period'] = period
+        sample_id = os.path.basename(file_path).split('_')[1]
+        df['ID'] = sample_id
+        df['MutationType'] = df['MutationType'].where(df['MutationType'].isin(contexts), 'Other')
+        return df.groupby(['MutationType', 'Period', 'ID'], as_index=False)[sbs_column].mean()
+
+    # Load and combine all data
+    all_data = pd.concat(
+        process_file(os.path.join(dirs[period], f), period)
+        for period in dirs
+        for f in os.listdir(dirs[period])
+        if f.endswith('.txt')
+    )
+
+    # Filter for valid sample IDs
+    filtered_data = all_data[all_data['ID'].isin(ids_to_include)]
+    ordered_types = contexts + ['Other']
+    filtered_data['MutationType'] = pd.Categorical(filtered_data['MutationType'], categories=ordered_types, ordered=True)
+
+    # Plotting
+    plt.figure(figsize=figsize)
+    palette = {
+        'Early': 'grey',
+        'Late': to_rgba('lightgrey', alpha=0.1)
+    }
+    sns.boxplot(
+        x='MutationType', y=sbs_column, hue='Period', data=filtered_data, palette=palette, fliersize=1.8,
+        boxprops=dict(edgecolor='black', linewidth=0.4),
+        whiskerprops=dict(color='black', linewidth=0.4),
+        capprops=dict(color='black', linewidth=0.4),
+        medianprops=dict(color='black'),
+        flierprops=dict(markeredgecolor='black', linewidth=0.5)
+    )
+
+    for i in range(1, len(ordered_types)):
+        plt.axvline(i - 0.5, color='grey', linestyle='--', linewidth=0.5)
+
+    plt.ylim(0, 1)
+    plt.title(cohort)
+    plt.xlabel('Mutation Type')
+    plt.ylabel(f'{sbs_column} Probability')
+    plt.legend().set_visible(False)
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    plt.show()
+
+def plot_sbs1_vs_age(samples_dict, cohort_name, base_signature_dir, metadata_csv_path):
+    """
+    Plot SBS1 accumulation vs age for a given cohort and return the merged dataframe.
+
+    Parameters:
+    - samples_dict (dict): Dictionary of sample_id -> mutation dataframe.
+    - cohort_name (str): Name of the cohort (e.g., 'PCAWG', 'SCANB', 'INFORM').
+    - base_signature_dir (str): Path to the base directory containing signature fitting results.
+    - metadata_csv_path (str): Path to the metadata CSV file.
+
+    Returns:
+    - metadata (pd.DataFrame): Merged dataframe with computed columns.
+    """
+
+    # Compute genome size G
+    G_values = {sample_id: HRDTimerUtils.G(df) for sample_id, df in samples_dict.items()}
+    G_df = pd.DataFrame.from_dict(G_values, orient='index', columns=['G']).reset_index()
+    G_df.rename(columns={'index': 'sample'}, inplace=True)
+
+    # Load metadata and filter
+    metadata = pd.read_csv(metadata_csv_path)
+    metadata = metadata[['sample', 'age', 'isWGD','HRDetect.isHRD', 'organ']]
+    metadata = metadata[(metadata['isWGD'] == True) & (metadata['organ'] == 'Breast')]
+    metadata = metadata.merge(G_df, on='sample', how='left')
+
+    # Load SBS1 exposures from SignatureFitting outputs
+    folders = {'Early': 'early', 'Late': 'late', 'NA': 'na'}
+    for phase, suffix in folders.items():
+        exposure_path = os.path.join(base_signature_dir, phase, "exposures", "exposures_MuSiCal_lik.csv")
+        if not os.path.exists(exposure_path):
+            continue
+        df = pd.read_csv(exposure_path, index_col=0)
+        df.rename(columns={c: c.replace(f"_{suffix}", '') for c in df.columns if c.endswith(f"_{suffix}")}, inplace=True)
+        sub = df.loc[['SBS1']].T
+        sub.columns = [f'SBS1_{phase}']
+        sub.index.name = 'sample'
+        metadata = metadata.merge(sub, on='sample', how='left')
+
+    # Compute total SBS1 and normalize
+    metadata['SBS1_total'] = metadata[['SBS1_Early', 'SBS1_Late', 'SBS1_NA']].sum(axis=1, skipna=True)
+    metadata['Cohort'] = cohort_name
+    metadata['scaled_SBS1'] = metadata['SBS1_total'] / (metadata['G'] * 3000)
+
+    # Plot
+    plt.figure(figsize=(6, 5))
+    sns.scatterplot(data=metadata, x='age', y='scaled_SBS1', alpha=0.7)
+    plt.ylim(0, 0.18)
+    plt.xlim(0, 90)
+    plt.xlabel("Age")
+    plt.ylabel("SBS1_total / (G * 3000)")
+    plt.title(f"SBS1 Accumulation vs Age — {cohort_name}")
+    plt.tight_layout()
+    plt.show()
+
+    return metadata
 # -------------------------- HRD Time New bootstrapping method ---------------------------------
 # ------------ Changing only signature posterior probabilities in each bootstrap ---------------
 
