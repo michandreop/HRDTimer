@@ -1,4 +1,7 @@
-    if (interactive()) {
+# looks for regions consistent with genome doubling
+# annotates vcf files with with inWGDregion tag
+
+if (interactive()) {
     # default values for debugging mode
     # long sample ID
 
@@ -7,40 +10,6 @@
     plot_folder <- '~/park_dglodzik/TimeR_bb_all_v2/hrdtimer_plots/'
     result_folder <- '~/park_dglodzik/TimeR_bb_all_v2/hrdtimer_results/'
     purity <- 0.461
-     
-        
-    #aliquot_id <- '54e78de0-d357-4125-a904-ab35e461572b'
-    # short sample ID
-    #rdata_fn <- '/home/dg204/park_dglodzik/TimeR_bb_all_v2//data/54e78de0-d357-4125-a904-ab35e461572b.RData'
-    #plot_folder <- '~/park_dglodzik/TimeR_bb_all_v2/hrdtimer_plots/'
-    #result_folder <- '~/park_dglodzik/TimeR_bb_all_v2/hrdtimer_results/'
-    #purity <- 0.461
-
-    #aliquot_id <- '0d0793c1-df1b-4db1-ba36-adcb960cc0f5'
-    #rdata_fn <- '/home/dg204/park_dglodzik/TimeR_bb_all_v2//data/0d0793c1-df1b-4db1-ba36-adcb960cc0f5.RData'
-    #plot_folder <- '/home/dg204/park_dglodzik/TimeR_bb_all_v2//hrdtimer_plots/'
-    #result_folder <- '/home/dg204/park_dglodzik/TimeR_bb_all_v2//hrdtimer_results/'
-    #purity <- 0.74    
-    
-    #aliquot_id <- 'Patient101'
-    # short sample ID
-    #rdata_fn <- '/home/dg204/park_dglodzik/TimeR_INFORM/data/Patient101.RData'
-    #plot_folder <- '/home/dg204/park_dglodzik/TimeR_INFORM/hrdtimer_plots/'
-    #result_folder <- '/home/dg204/park_dglodzik/TimeR_INFORM/'
-    #purity <- 0.68
-    
-    #aliquot_id <- 'AOCS-092-3-3:vs:AOCS-092-5-0'
-    #rdata_fn <- "/home/dg204/park_dglodzik/TimeR_ICGC/data/AOCS-092-3-3:vs:AOCS-092-5-0.RData"
-    #plot_folder <- "/home/dg204/park_dglodzik/TimeR_ICGC/hrdtimer_plots/"
-    #result_folder <- "/home/dg204/park_dglodzik/TimeR_ICGC/hrdtimer_results/"
-    #purity <- 0.59
-
-    #aliquot_id <- 'PD31031a'
-    #rdata_fn <- "/home/dg204/park_dglodzik/TimeR_SCANB/data/PD31031a.RData"
-    #plot_folder <- "//home/dg204/park_dglodzik/TimeR_SCANB/hrdtimer_plots/"
-    #result_folder <- "/home/dg204/park_dglodzik/TimeR_SCANB/hrdtimer_results/"
-    #purity <- 0.31    
-
     nboot <- 200
     
 } else {

@@ -54,7 +54,7 @@ if [ ! -d "$RESULT_HRDTIMER_PATH" ]; then
 fi
 
 echo 'hrdtimer starting'
-Rscript run_hrdtimer.R \
+Rscript run_timer_wgd.R \
 "$ALIQUOT_ID" \
 "$RDATA" \
 "$PLOT_FOLDER" \

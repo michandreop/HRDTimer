@@ -48,7 +48,7 @@ if [ ! -d "$RESULT_HRDTIMER_PATH" ]; then
   mkdir -p "$RESULT_HRDTIMER_PATH"
 fi
  
-Rscript run_hrdtimer.R \
+Rscript run_timer_wgd.R \
 "$ALIQUOT_ID" \
 "$RDATA" \
 "$PLOT_FOLDER" \
