@@ -34,5 +34,5 @@ The `example_workflow.ipynb` demonstrates typical HRDTimer analyses using the `e
 
 - **Preprocessing:** Assigning mutation-specific signatures and timing probabilities to individual mutations  
 - **Bootstrapping:** Estimating confidence in mutational signature analysis  
-- **Timing analyses:** Inferring Whole-Genome Duplication (WGD) events and the onset of Homologous Recombination Deficiency (HRD) on a molecular time scale  
+- **Timing analyses:** Inferring the timing of Whole-Genome Duplication (WGD) and the onset of Homologous Recombination Deficiency (HRD) on a molecular time scale  
 - **Age translation:** Converting molecular timing to human age using inferred SBS1 acceleration models  
