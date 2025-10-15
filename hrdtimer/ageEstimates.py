@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+def calculate_line(x, slope, intercept):
+    return slope * x + intercept
+
 def plot_filled_lines(ax, y, WGD, HRD, W_err_hi, W_err_lo, H_err_hi, H_err_lo):
     y_val = y.values[0]
     ax.fill_betweenx(
@@ -15,7 +18,321 @@ def plot_filled_lines(ax, y, WGD, HRD, W_err_hi, W_err_lo, H_err_hi, H_err_lo):
         x1=ax.get_xlim()[0], x2=85, color='#21255e', alpha=0.5
     )
     ax.axhline(y=HRD * y_val, color='#21255e', linestyle='--')
+
+def analyze_cohort_timing_old(cohort_name, bulk_tumor_df, hrd_timer_df, output_csv, output_fig=None, late_SBS1_burden=0):
+    samples = bulk_tumor_df[bulk_tumor_df['Cohort'] == cohort_name]
+    merged = pd.merge(samples, hrd_timer_df, left_on='aliquot_id', right_on='ID').drop(columns='ID')
+
+    x_values = np.linspace(0, 90, 1000)
+    ref_slope = 0.0002569
+    slope_max = 30 * ref_slope
+
+    results = []
+    IDs = merged['aliquot_id'].unique()
+    nrows, ncols = -(-len(IDs) // 5), 5
+    fig, axs = plt.subplots(nrows, ncols, figsize=(20, nrows * 4))
+    axs = axs.flatten()
+
+    def intersect_lines(m1, b1, m2, b2):
+        return (b2 - b1) / (m1 - m2) if abs(m1 - m2) >= 1e-14 else np.nan
     
+    def min_positive(*args):
+        pos = [x for x in args if x is not None and not np.isnan(x)]
+        if pos:
+            return max(0, min(pos))  # floor to 0 if min is negative
+        else:
+            return np.nan
+
+    def zero_floor(val):
+        return max(0, val) if pd.notna(val) else val
+
+    for idx, sid in enumerate(IDs):
+        d = merged[merged['aliquot_id'] == sid]
+        if d['scaled_SBS1_y'].empty or d['age_y'].empty:
+            continue
+        x_breast, y_breast = d['age_y'].values[0], d['scaled_SBS1_y'].values[0]
+        if pd.isna(x_breast) or x_breast == 0:
+            continue
+
+        display_id = d['sample.display'].values[0]
+        timing_class = d['timing_class'].values[0] if 'timing_class' in d.columns else 'Unknown'
+
+        WGD, HRD = d[['WGDTime', 'HRDTime']].values[0]
+        W_err_hi, W_err_lo, H_err_hi, H_err_lo = d[['WGDTime_ci_hi', 'WGDTime_ci_lo', 'HRDTime_ci_hi', 'HRDTime_ci_lo']].values[0]
+
+        y_breast_corrected = y_breast + late_SBS1_burden
+        ax = axs[idx]
+
+        plot_filled_lines(ax, pd.Series(y_breast), WGD, HRD, W_err_hi, W_err_lo, H_err_hi, H_err_lo)
+        # Plot slope lines
+        ax.plot(x_values, ref_slope * x_values, color='grey', linestyle='-')
+        duration = 10.5 if timing_class == 'TN' else 16.3 if timing_class == 'ER+' else 0
+        x_div = max(x_breast - duration, 1e-3)
+        y_div = ref_slope * x_div
+
+        slope_intermediate = (y_breast_corrected - y_div) / (x_breast - x_div)
+        intercept_intermediate = y_breast_corrected - slope_intermediate * x_breast
+        intercept_max = y_breast_corrected - slope_max * x_breast
+        straight_slope = y_breast_corrected / x_breast
+
+        ax.plot(x_values, slope_intermediate * x_values + intercept_intermediate, '--', color='#658E9C')
+        ax.plot(x_values, slope_max * x_values + intercept_max, '--', color='k')
+        ax.plot(x_values, straight_slope * x_values, '--', color='grey')
+
+        ax.scatter(x_breast, y_breast_corrected, color='#C9A690', edgecolors='black',
+           linewidths=0.5, s=70, zorder=20, label='SBS1 incl. late')
+        ax.scatter(x_breast, y_breast, color='#D36582', edgecolors='black',
+           linewidths=0.5, s=30, zorder=20, label='SBS1 at MRCA')
+        ax.scatter(x_div, y_div, color='#658E9C', s=70, edgecolors='black',
+           linewidths=0.5, zorder=20, label='Divergence')
+
+        y_scenarios = {
+            'HRD': HRD * y_breast,
+            'HRD_low': (HRD - H_err_lo) * y_breast,
+            'HRD_high': (HRD + H_err_hi) * y_breast,
+            'WGD': WGD * y_breast,
+            'WGD_low': (WGD - W_err_lo) * y_breast,
+            'WGD_high': (WGD + W_err_hi) * y_breast
+        }
+
+        def compute_intersections(y_val):
+            return {
+                'linear': y_val / straight_slope if straight_slope != 0 else np.nan,
+                'norm_int': min_positive(
+                    intersect_lines(ref_slope, 0, 0, y_val),
+                    intersect_lines(slope_intermediate, intercept_intermediate, 0, y_val)
+                ),
+                'norm_max': min_positive(
+                    intersect_lines(ref_slope, 0, 0, y_val),
+                    intersect_lines(slope_max, intercept_max, 0, y_val)
+                )
+            }
+
+        HRD_results = {k: compute_intersections(v) for k, v in y_scenarios.items() if 'HRD' in k}
+        WGD_results = {k: compute_intersections(v) for k, v in y_scenarios.items() if 'WGD' in k}
+
+        # Plot intersections
+        def plot_point(x, y, color, marker='o'):
+            if pd.notna(x):
+                ax.scatter(x, y, color=color, s=40, marker=marker)
+
+        # Nominal points
+        #plot_point(HRD_results['HRD']['linear'], y_scenarios['HRD'], 'black')
+        #plot_point(WGD_results['WGD']['linear'], y_scenarios['WGD'], 'black')
+
+        #plot_point(HRD_results['HRD']['norm_int'], y_scenarios['HRD'], 'blue')
+        #plot_point(WGD_results['WGD']['norm_int'], y_scenarios['WGD'], 'green')
+
+        #plot_point(HRD_results['HRD']['norm_max'], y_scenarios['HRD'], 'cyan', marker='x')
+        #plot_point(WGD_results['WGD']['norm_max'], y_scenarios['WGD'], 'lime', marker='x')
+
+        # Low CI points
+        #plot_point(HRD_results['HRD_low']['norm_int'], y_scenarios['HRD_low'], 'blue')
+        #plot_point(WGD_results['WGD_low']['norm_int'], y_scenarios['WGD_low'], 'green')
+        #plot_point(HRD_results['HRD_low']['norm_max'], y_scenarios['HRD_low'], 'cyan', marker='x')
+        #plot_point(WGD_results['WGD_low']['norm_max'], y_scenarios['WGD_low'], 'lime', marker='x')
+
+        # High CI points
+        #plot_point(HRD_results['HRD_high']['norm_int'], y_scenarios['HRD_high'], 'blue')
+        #plot_point(WGD_results['WGD_high']['norm_int'], y_scenarios['WGD_high'], 'green')
+        #plot_point(HRD_results['HRD_high']['norm_max'], y_scenarios['HRD_high'], 'cyan', marker='x')
+        #plot_point(WGD_results['WGD_high']['norm_max'], y_scenarios['WGD_high'], 'lime', marker='x')
+
+        ax.set(
+            title=f"{display_id} ({timing_class}) \n MRCA-diagnosis ({duration} [yr])",
+            xlim=(0, 85),
+            ylim=(0, 0.13),
+            xlabel='Age',
+            ylabel='SBS1 / G x 3000 Mb'
+        )
+
+        results.append({
+            'ID': sid,
+            'Age': x_breast,
+            'HRD_linear': zero_floor(HRD_results['HRD']['linear']),
+            'HRD_linear_low': zero_floor(HRD_results['HRD_low']['linear']),
+            'HRD_linear_high': zero_floor(HRD_results['HRD_high']['linear']),
+            'WGD_linear': zero_floor(WGD_results['WGD']['linear']),
+            'WGD_linear_low': zero_floor(WGD_results['WGD_low']['linear']),
+            'WGD_linear_high': zero_floor(WGD_results['WGD_high']['linear']),
+            'HRD_norm_int': zero_floor(HRD_results['HRD']['norm_int']),
+            'HRD_norm_int_low': zero_floor(HRD_results['HRD_low']['norm_int']),
+            'HRD_norm_int_high': zero_floor(HRD_results['HRD_high']['norm_int']),
+            'WGD_norm_int': zero_floor(WGD_results['WGD']['norm_int']),
+            'WGD_norm_int_low': zero_floor(WGD_results['WGD_low']['norm_int']),
+            'WGD_norm_int_high': zero_floor(WGD_results['WGD_high']['norm_int']),
+            'HRD_norm_max': zero_floor(HRD_results['HRD']['norm_max']),
+            'HRD_norm_max_low': zero_floor(HRD_results['HRD_low']['norm_max']),
+            'HRD_norm_max_high': zero_floor(HRD_results['HRD_high']['norm_max']),
+            'WGD_norm_max': zero_floor(WGD_results['WGD']['norm_max']),
+            'WGD_norm_max_low': zero_floor(WGD_results['WGD_low']['norm_max']),
+            'WGD_norm_max_high': zero_floor(WGD_results['WGD_high']['norm_max']),
+        })
+
+    pd.DataFrame(results).to_csv(output_csv, index=False)
+
+    plt.tight_layout()
+    if output_fig:
+        plt.savefig(output_fig, format='pdf', bbox_inches='tight', dpi=600)
+    plt.show()
+
+def analyze_cohort_timing(cohort_name, bulk_tumor_df, hrd_timer_df, output_csv, output_fig=None, late_SBS1_burden=0):
+    samples = bulk_tumor_df[bulk_tumor_df['Cohort'] == cohort_name]
+    merged = pd.merge(samples, hrd_timer_df, left_on='sample', right_on='ID').drop(columns='ID')
+
+    x_values = np.linspace(0, 90, 1000)
+    ref_slope = 0.0002569
+    slope_max = 30 * ref_slope
+
+    results = []
+    IDs = merged['sample'].unique()
+    nrows, ncols = -(-len(IDs) // 5), 5
+    fig, axs = plt.subplots(nrows, ncols, figsize=(20, nrows * 4))
+    axs = axs.flatten()
+
+    def intersect_lines(m1, b1, m2, b2):
+        return (b2 - b1) / (m1 - m2) if abs(m1 - m2) >= 1e-14 else np.nan
+    
+    def min_positive(*args):
+        pos = [x for x in args if x is not None and not np.isnan(x)]
+        if pos:
+            return max(0, min(pos))  # floor to 0 if min is negative
+        else:
+            return np.nan
+
+    def zero_floor(val):
+        return max(0, val) if pd.notna(val) else val
+
+    for idx, sid in enumerate(IDs):
+        d = merged[merged['sample'] == sid]
+        if d['scaled_SBS1_y'].empty or d['age_y'].empty:
+            continue
+        x_breast, y_breast = d['age_y'].values[0], d['scaled_SBS1_y'].values[0]
+        if pd.isna(x_breast) or x_breast == 0:
+            continue
+
+        display_id = d['sample.display'].values[0]
+        timing_class = d['timing_class'].values[0] if 'timing_class' in d.columns else 'Unknown'
+
+        WGD, HRD = d[['WGDTime', 'HRDTime']].values[0]
+        W_err_hi, W_err_lo, H_err_hi, H_err_lo = d[['WGDTime_ci_hi', 'WGDTime_ci_lo', 'HRDTime_ci_hi', 'HRDTime_ci_lo']].values[0]
+
+        y_breast_corrected = y_breast + late_SBS1_burden
+        ax = axs[idx]
+
+        plot_filled_lines(ax, pd.Series(y_breast), WGD, HRD, W_err_hi, W_err_lo, H_err_hi, H_err_lo)
+        # Plot slope lines
+        ax.plot(x_values, ref_slope * x_values, color='grey', linestyle='-')
+        duration = 10.5 if timing_class == 'TN' else 16.3 if timing_class == 'ER+' else 0
+        x_div = max(x_breast - duration, 1e-3)
+        y_div = ref_slope * x_div
+
+        slope_intermediate = (y_breast_corrected - y_div) / (x_breast - x_div)
+        intercept_intermediate = y_breast_corrected - slope_intermediate * x_breast
+        intercept_max = y_breast_corrected - slope_max * x_breast
+        straight_slope = y_breast_corrected / x_breast
+
+        ax.plot(x_values, slope_intermediate * x_values + intercept_intermediate, '--', color='#658E9C')
+        ax.plot(x_values, slope_max * x_values + intercept_max, '--', color='k')
+        ax.plot(x_values, straight_slope * x_values, '--', color='grey')
+
+        ax.scatter(x_breast, y_breast_corrected, color='#C9A690', edgecolors='black',
+           linewidths=0.5, s=70, zorder=20, label='SBS1 incl. late')
+        ax.scatter(x_breast, y_breast, color='#D36582', edgecolors='black',
+           linewidths=0.5, s=30, zorder=20, label='SBS1 at MRCA')
+        ax.scatter(x_div, y_div, color='#658E9C', s=70, edgecolors='black',
+           linewidths=0.5, zorder=20, label='Divergence')
+
+        y_scenarios = {
+            'HRD': HRD * y_breast,
+            'HRD_low': (HRD - H_err_lo) * y_breast,
+            'HRD_high': (HRD + H_err_hi) * y_breast,
+            'WGD': WGD * y_breast,
+            'WGD_low': (WGD - W_err_lo) * y_breast,
+            'WGD_high': (WGD + W_err_hi) * y_breast
+        }
+
+        def compute_intersections(y_val):
+            return {
+                'linear': y_val / straight_slope if straight_slope != 0 else np.nan,
+                'norm_int': min_positive(
+                    intersect_lines(ref_slope, 0, 0, y_val),
+                    intersect_lines(slope_intermediate, intercept_intermediate, 0, y_val)
+                ),
+                'norm_max': min_positive(
+                    intersect_lines(ref_slope, 0, 0, y_val),
+                    intersect_lines(slope_max, intercept_max, 0, y_val)
+                )
+            }
+
+        HRD_results = {k: compute_intersections(v) for k, v in y_scenarios.items() if 'HRD' in k}
+        WGD_results = {k: compute_intersections(v) for k, v in y_scenarios.items() if 'WGD' in k}
+
+        # Plot intersections
+        def plot_point(x, y, color, marker='o'):
+            if pd.notna(x):
+                ax.scatter(x, y, color=color, s=40, marker=marker)
+
+        # Nominal points
+        #plot_point(HRD_results['HRD']['linear'], y_scenarios['HRD'], 'black')
+        #plot_point(WGD_results['WGD']['linear'], y_scenarios['WGD'], 'black')
+
+        #plot_point(HRD_results['HRD']['norm_int'], y_scenarios['HRD'], 'blue')
+        #plot_point(WGD_results['WGD']['norm_int'], y_scenarios['WGD'], 'green')
+
+        #plot_point(HRD_results['HRD']['norm_max'], y_scenarios['HRD'], 'cyan', marker='x')
+        #plot_point(WGD_results['WGD']['norm_max'], y_scenarios['WGD'], 'lime', marker='x')
+
+        # Low CI points
+        #plot_point(HRD_results['HRD_low']['norm_int'], y_scenarios['HRD_low'], 'blue')
+        #plot_point(WGD_results['WGD_low']['norm_int'], y_scenarios['WGD_low'], 'green')
+        #plot_point(HRD_results['HRD_low']['norm_max'], y_scenarios['HRD_low'], 'cyan', marker='x')
+        #plot_point(WGD_results['WGD_low']['norm_max'], y_scenarios['WGD_low'], 'lime', marker='x')
+
+        # High CI points
+        #plot_point(HRD_results['HRD_high']['norm_int'], y_scenarios['HRD_high'], 'blue')
+        #plot_point(WGD_results['WGD_high']['norm_int'], y_scenarios['WGD_high'], 'green')
+        #plot_point(HRD_results['HRD_high']['norm_max'], y_scenarios['HRD_high'], 'cyan', marker='x')
+        #plot_point(WGD_results['WGD_high']['norm_max'], y_scenarios['WGD_high'], 'lime', marker='x')
+
+        ax.set(
+            title=f"{display_id} ({timing_class}) \n MRCA-diagnosis ({duration} [yr])",
+            xlim=(0, 85),
+            ylim=(0, 0.13),
+            xlabel='Age',
+            ylabel='SBS1 / G x 3000 Mb'
+        )
+
+        results.append({
+            'ID': sid,
+            'Age': x_breast,
+            'HRD_linear': zero_floor(HRD_results['HRD']['linear']),
+            'HRD_linear_low': zero_floor(HRD_results['HRD_low']['linear']),
+            'HRD_linear_high': zero_floor(HRD_results['HRD_high']['linear']),
+            'WGD_linear': zero_floor(WGD_results['WGD']['linear']),
+            'WGD_linear_low': zero_floor(WGD_results['WGD_low']['linear']),
+            'WGD_linear_high': zero_floor(WGD_results['WGD_high']['linear']),
+            'HRD_norm_int': zero_floor(HRD_results['HRD']['norm_int']),
+            'HRD_norm_int_low': zero_floor(HRD_results['HRD_low']['norm_int']),
+            'HRD_norm_int_high': zero_floor(HRD_results['HRD_high']['norm_int']),
+            'WGD_norm_int': zero_floor(WGD_results['WGD']['norm_int']),
+            'WGD_norm_int_low': zero_floor(WGD_results['WGD_low']['norm_int']),
+            'WGD_norm_int_high': zero_floor(WGD_results['WGD_high']['norm_int']),
+            'HRD_norm_max': zero_floor(HRD_results['HRD']['norm_max']),
+            'HRD_norm_max_low': zero_floor(HRD_results['HRD_low']['norm_max']),
+            'HRD_norm_max_high': zero_floor(HRD_results['HRD_high']['norm_max']),
+            'WGD_norm_max': zero_floor(WGD_results['WGD']['norm_max']),
+            'WGD_norm_max_low': zero_floor(WGD_results['WGD_low']['norm_max']),
+            'WGD_norm_max_high': zero_floor(WGD_results['WGD_high']['norm_max']),
+        })
+
+    pd.DataFrame(results).to_csv(output_csv, index=False)
+
+    plt.tight_layout()
+    if output_fig:
+        plt.savefig(output_fig, format='pdf', bbox_inches='tight', dpi=600)
+    plt.show()
+
 def MolecularTime_to_Age(SBS1_exposures, moleculartimedf, metadata, late_SBS1_burden=0, output_fig=None):
     """
     Estimate chronological timing of WGD and HRD events using SBS1 molecular clock data.
@@ -191,4 +508,3 @@ def MolecularTime_to_Age(SBS1_exposures, moleculartimedf, metadata, late_SBS1_bu
     plt.show()
 
     return pd.DataFrame(results)
-
