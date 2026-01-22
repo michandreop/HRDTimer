@@ -121,6 +121,38 @@ def process_vcf_dataframe(df, time_analysis=False):
     df.rename(columns={'powr': 'pow'}, inplace=True)
     return df
 
+def process_vcf_dataframe(df, time_analysis=False):
+    df.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'INFO']
+    df['ID'] = df['ID'].apply(lambda x: x[0] if x else '.')
+    df['ALT'] = df['ALT'].apply(lambda x: x[0].value if x else '.')
+
+    get_info = lambda info, key: info.get(key, '.')
+    fields = ['MajCN', 'MinCN', 'MutCN', 'context', 'CLS', 'inWGDregion', 'powr']
+    for f in fields:
+        df[f] = df['INFO'].apply(lambda info: get_info(info, f))
+
+    # Normalize CLS
+    def normalize_cls(value):
+        v = str(value)
+        if v.startswith("clonal"):
+            import re
+            m = re.search(r"\[(.+?)\]", v)
+            return m.group(1) if m else None
+        if v == "subclonal":
+            return "subclonal"
+        return None
+
+    df['CLS'] = df['CLS'].apply(normalize_cls)
+
+    # Keep only rows with valid context and CLS
+    df = df[(df['context'] != '.') & df['CLS'].notna()]
+
+    if time_analysis:
+        df = df[(df['MajCN'] == 2) & (df['inWGDregion'] == 'TRUE')]
+
+    df.rename(columns={'powr': 'pow'}, inplace=True)
+    return df
+
 # --------- HRDTimer related functions -----
 
 def G(df):
@@ -265,6 +297,84 @@ def process_vcfs_early_late(input_folder, output_folder, organ_csv_path, time_an
                 if verbose:
                     print(f"Removed empty folder: {base_dir}")
 
+def process_vcfs_early_late_subclonal(input_folder, output_folder, organ_csv_path, time_analysis=False, verbose=False):
+    """
+    Process all VCF files in the input folder and save the processed files in the output folder.
+    Adds support for 'subclonal' CLS type.
+
+    Args:
+    - input_folder (str): Path to the folder containing VCF files.
+    - output_folder (str): Path to the folder where processed VCF files will be saved.
+    - organ_csv_path (str): Path to the CSV file containing organ information.
+    - time_analysis (bool): If True, create a 'timing' folder; otherwise, create 'all_mut' folder.
+    - verbose (bool): If True, print status messages.
+    """
+
+    organ_df = pd.read_csv(organ_csv_path)
+    organ_lookup = organ_df.set_index('sample')['organ'].to_dict()
+    created_folders = set()
+
+    # Predefine output folders for each organ and CLS type
+    organ_folders = {
+        organ: {
+            "timing" if time_analysis else "all_mut": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut"),
+            "Early": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut", "Early"),
+            "Late": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut", "Late"),
+            "NA": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut", "NA"),
+            "Subclonal": os.path.join(output_folder, organ, "timing" if time_analysis else "all_mut", "Subclonal")
+        }
+        for organ in organ_df['organ'].unique()
+    }
+
+    # Create all required folders
+    for folders in organ_folders.values():
+        for folder in folders.values():
+            os.makedirs(folder, exist_ok=True)
+
+    written_folders = set()
+
+    # Process VCF files in the input folder
+    for filename in tqdm([f for f in os.listdir(input_folder) if f.endswith(".vcf")], desc="Processing VCFs", file=sys.stdout):
+        vcf_path = os.path.join(input_folder, filename)
+        aliquot_id = filename.split(".")[0]
+        organ = organ_lookup.get(aliquot_id)
+
+        if not organ:
+            continue
+
+        # Process VCF
+        sample = vcf_to_dataframe(vcf_path)
+        if time_analysis:
+            sample = process_vcf_dataframe(sample, time_analysis=True)
+        else:
+            sample = process_vcf_dataframe(sample)
+
+        cls_groups = {
+            "Early": sample[sample['CLS'] == 'early'],
+            "Late": sample[sample['CLS'] == 'late'],
+            "NA": sample[sample['CLS'] == 'NA'],
+            "Subclonal": sample[sample['CLS'] == 'subclonal']
+        }
+
+        for cls, df in cls_groups.items():
+            if not df.empty:
+                output_vcf = os.path.join(
+                    organ_folders[organ]["timing" if time_analysis else "all_mut"], cls, f"{aliquot_id}_{cls.lower()}.vcf"
+                )
+                dataframe_to_vcf(df, output_vcf)
+                written_folders.add(os.path.dirname(output_vcf))
+
+    # Cleanup: remove any empty organ folders (and subfolders)
+    for organ in organ_folders:
+        base_dir = os.path.join(output_folder, organ)
+        if not any(
+            written_folder.startswith(os.path.join(output_folder, organ)) for written_folder in written_folders
+        ):
+            if os.path.exists(base_dir):
+                shutil.rmtree(base_dir)
+                if verbose:
+                    print(f"Removed empty folder: {base_dir}")
+
 def save_probabilities(H_reduced_normalized, W_reduced, output_dir):
     # Create a directory to store probability files if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
@@ -343,7 +453,7 @@ def run_Signature_Analysis(parent_folder, genome_build):
     Args:
     - parent_folder (str): Path to the parent folder that contains subfolders 'Early', 'Late', 'NA'.
     """
-    subfolders = ['Early', 'Late', 'NA']
+    subfolders = ['Early', 'Late', 'NA', 'Subclonal']
     
     # Iterate through subfolders
     for subfolder in subfolders:
@@ -388,7 +498,7 @@ def prepare_samples_for_timing(vcf_folder_path):
     sample_dfs = {}
 
     # Iterate over subfolders
-    for subfolder in ['Early', 'Late', 'NA']:
+    for subfolder in ['Early', 'Late', 'NA', 'Subclonal']:
         subfolder_path = os.path.join(vcf_folder_path, subfolder)
         if not os.path.exists(subfolder_path): continue
 
