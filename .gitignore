@@ -12,3 +12,9 @@ scNanoSeq_Michael/
 data_scNanoSeq/
 revision/
 HRDTimer_PreProcess_sub/
+pipeline/bootstraps
+pipeline/output
+pipeline/results
+pipeline/slurm_jobs
+pipeline/instructions.txt
+.vscode
