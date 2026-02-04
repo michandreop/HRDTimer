@@ -16,3 +16,4 @@ dependencies:
   - pip:
       - vcfpy>=0.13.6
       - SigProfilerAssignment>=1.1.6.2
+      - SigProfilerMatrixGenerator>=1.3.10
