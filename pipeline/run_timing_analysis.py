@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""
+run_HRDTimer_analysis.py
+
+Run HRDTimer analysis on a batch of sample IDs:
+- Generate bootstraps
+- Perform timing analysis
+- Save results to CSV
+
+All paths and parameters are configurable via CLI arguments.
+"""
+
+import os
+import sys
+import argparse
+import logging
+from pathlib import Path
+
+# ------------------
+# Add parent directory to sys.path to find hrdtimer
+# ------------------
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+try:
+    from hrdtimer import preProcess
+    from hrdtimer import timing as HRDTimer
+except ImportError as e:
+    print(f"ERROR: Could not import hrdtimer modules: {e}")
+    sys.exit(1)
+
+
+def safe_print(msg, outfile=None):
+    """Print to console and optionally append to a log file"""
+    print(msg)
+    if outfile:
+        try:
+            with open(outfile, "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except Exception as e:
+            logging.warning(f"Failed to write to {outfile}: {e}")
+
+
+def main(args):
+    # ------------------
+    # Resolve paths
+    # ------------------
+    timing_vcfs_path = Path(args.input_dir)
+    bootstrap_root = Path(args.bootstrap_dir)
+    results_root = Path(args.results_dir)
+
+    bootstrap_dir = bootstrap_root / args.job_id
+    output_csv_path = results_root / f"{args.job_id}.csv"
+
+    # Ensure directories exist
+    bootstrap_dir.mkdir(parents=True, exist_ok=True)
+    results_root.mkdir(parents=True, exist_ok=True)
+
+    # Log file for this job
+    log_file = bootstrap_dir / f"{args.job_id}.out"
+    with open(log_file, "w", encoding="utf-8") as f:
+        f.write(f"--- HRDTimer Analysis Job {args.job_id} ---\n")
+
+    safe_print(f"Job ID: {args.job_id}", log_file)
+    safe_print(f"Sample IDs: {args.sample_ids}", log_file)
+    safe_print(f"Timing VCFs path: {timing_vcfs_path}", log_file)
+    safe_print(f"Bootstraps directory: {bootstrap_dir}", log_file)
+    safe_print(f"Results CSV path: {output_csv_path}", log_file)
+
+    # ------------------
+    # Prepare samples
+    # ------------------
+    all_samples = preProcess.prepare_samples_for_timing(timing_vcfs_path)
+    samples_to_time = {
+        sid: all_samples[sid] for sid in args.sample_ids if sid in all_samples
+    }
+
+    if not samples_to_time:
+        safe_print("No valid sample IDs found for this job. Exiting.", log_file)
+        sys.exit(1)
+
+    safe_print(f"Number of valid samples: {len(samples_to_time)}", log_file)
+
+    # ------------------
+    # Generate bootstraps
+    # ------------------
+    safe_print("Generating bootstraps...", log_file)
+    HRDTimer.generate_bootstraps(
+        samples_dict=samples_to_time,
+        n_bootstraps=args.n_bootstraps,
+        output_dir=str(bootstrap_dir)
+    )
+    safe_print(f"Bootstraps written to {bootstrap_dir}", log_file)
+
+    # ------------------
+    # Run HRD/WGD timing analysis
+    # ------------------
+    safe_print("Running HRD/WGD timing analysis...", log_file)
+    HRDTimer.run_hrd_wgd_timing_analysis(
+        hrd_wgd_timing_samples=samples_to_time,
+        bootstraps_dir=str(bootstrap_dir),
+        output_csv_path=str(output_csv_path)
+    )
+    safe_print(f"Timing results written to {output_csv_path}", log_file)
+    safe_print("Job completed successfully.", log_file)
+
+
+# ------------------
+# CLI
+# ------------------
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run HRDTimer analysis on a batch of samples")
+
+    parser.add_argument(
+        "--sample-ids",
+        nargs="+",
+        required=True,
+        help="List of sample IDs for this batch"
+    )
+    parser.add_argument(
+        "--job-id",
+        required=True,
+        help="Unique job/batch identifier"
+    )
+    parser.add_argument(
+        "--input-dir",
+        required=True,
+        help="Directory containing VCF files to analyze"
+    )
+    parser.add_argument(
+        "--bootstrap-dir",
+        default="./bootstraps",
+        help="Root directory to store bootstrap files (default: ./bootstraps)"
+    )
+    parser.add_argument(
+        "--results-dir",
+        default="./results",
+        help="Directory to save output CSV files (default: ./results)"
+    )
+    parser.add_argument(
+        "--n-bootstraps",
+        type=int,
+        default=200,
+        help="Number of bootstrap iterations (default: 200)"
+    )
+
+    args = parser.parse_args()
+    main(args)
+
+# -----------------------------------------------------------------------------------
+# EXAMPLE COMMANDS
+# -----------------------------------------------------------------------------------
+#
+# Manual run for a batch of samples:
+# $ python run_HRDTimer_analysis.py \
+#     --job-id batch_001 \
+#     --sample-ids sampleA sampleB sampleC \
+#     --input-dir /n/data1/hms/dbmi/park/michail_a/HRDTimer/data/timing \
+#     --bootstrap-dir ... \
+#     --results-dir ... \
+#     --n-bootstraps 200
+#
+# Typical usage via SLURM job script (generated by generate_slurm_jobs.py)
+# Logs and bootstrap files are created automatically in the specified directories.
+# -----------------------------------------------------------------------------------
