@@ -5,23 +5,11 @@ A computational toolkit for estimating the timing of homologous recombination de
 # Installation
 
 You can set up the HRDTimer environment using `conda`. You can install `conda` through [Anaconda](https://www.anaconda.com/docs/main).
-The full installation typically takes less than a minute on a standard laptop and can be completed as follows:
+The full installation typically takes less than a minute on a standard laptop. The Conda environment and all required dependencies can be installed by running the provided setup script:
 
-```
-# Clone the repository
-git clone https://github.com/michandreop/HRDTimer.git
+```bash
 cd HRDTimer/hrdtimer_env
-
-# Create and activate the environment
-conda env create -f environment.yml
-conda activate hrdtimer_env
-
-# Install MuSiCal dependency
-git clone https://github.com/parklab/MuSiCal.git
-cd MuSiCal && pip install . && cd ..
-
-# Go back to the main directory to run notebooks
-cd ..
+bash setup_environment.sh
 ```
 
 > **Note:** HRDTimer is not packaged as a Python module — after activating the environment, simply open and run the notebooks in the `notebooks/` directory using Jupyter Notebook or VS Code.
