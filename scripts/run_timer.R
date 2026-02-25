@@ -1,18 +1,18 @@
  if (interactive()) {
     # default values for debugging mode
     # long sample ID
-     
-    aliquot_id <- 'PD31031a'
+
+    aliquot_id <- '047f9e4d-86b5-4943-aef5-68199bf29e8c_p0.02'
     # purity
-    purity <- as.numeric('0.31')
+    purity <- as.numeric('0.639')
     data.type <- 'snvs'
-    result_path <- "~/park_dglodzik/TimeR_SCANB/"
-    vcf_fn <- "/home/dg204/repos/indels_sigmatrix/data/vcf_files_subs/PD31031a_subs.vcf.gz"
+    result_path <- "/home/dg204/park_dglodzik/TimeR_bb_cnv_test/"
+    vcf_fn <- "/home/dg204/park_data/ICGC/SNV_indel_calls/final_consensus_12oct_passonly/snv_mnv/01658141-8398-4585-9f0f-8355dd9b0604.consensus.20160830.somatic.snv_mnv.vcf.gz"
     # file path to the copy number profile
-    file <- "/home/dg204/park_dglodzik/data_repo/Lund/calls/Profiles/PD31031a.ascat_ngs.summary.csv"
+    file <- "/home/dg204/park_data/ICGC/CNV_all_callers_included/01658141-8398-4585-9f0f-8355dd9b0604.consensus.20170119.somatic.cna.annotated.txt"
     genomeBuild <- 'hg37'
     tumor.id <- ''
-    no_bootstraps <- 10
+     no_bootstraps <- 1000
 } else {
     args <- commandArgs(trailing = T)
     aliquot_id <- args[1]
@@ -31,33 +31,37 @@ data_fp <- paste0(result_path, "/data/")
 if (!file.exists(data_fp)) {
   dir.create(data_fp, recursive = TRUE)
 }
+# will be used the create the RData object
+
 vcf_fp <- paste0(result_path, "/vcfs/")
 if (!file.exists(vcf_fp)) {
   dir.create(vcf_fp, recursive = TRUE)
 }
+# will be used the save the vcf object
+
 plots_fp <- paste0(result_path, "/plots/")
 if (!file.exists(plots_fp)) {
   dir.create(plots_fp, recursive = TRUE)
 }
-sig_fp <- paste0(result_path, "/sigs/")
-if (!file.exists(data_fp)) {
-  dir.create(data_fp, recursive = TRUE)
-}
-
+# for the Timer and copy number plot
 
 # dependencies
-library(signature.tools.lib)
-library("extraDistr")
-library(TailRank)
+suppressPackageStartupMessages({
+    library(signature.tools.lib)
+    library("extraDistr")
+    library(TailRank)
+    library("BSgenome.Hsapiens.UCSC.hg38")
+    require(MutationTimeR)
+})
+
 source('utils/loadConsensusCNA.R')
 source('utils/plotBB.R')
 source('utils/plotSampleCustom.R')
-library("BSgenome.Hsapiens.UCSC.hg38")
 
-require(MutationTimeR)
-#source('/home/dg204/repos/MutationTimeR/R/MutationTime.R')
-
-
+# calculate parameters of beta-binomial distribution, given 
+# mu : expected VAF (variant allele fraction)
+# rho : overdispersion
+# size : total number of observations (sequencing depth)
 calculate_parameters <- function(mu, rho, size) {
   totalAB = size * (1 - rho) / rho
   alpha = mu * totalAB
@@ -65,12 +69,9 @@ calculate_parameters <- function(mu, rho, size) {
   return(list(alpha = alpha, beta = beta))
 }
 
-print(aliquot_id)
-print(purity)
 
-
-
-# Check version of the genome and build the catalogie
+# Check version of the genome and build the catalogue
+# this looks up mutation context for each mutation
 if (genomeBuild=='hg38') {
     sample_muts <- vcfToSNVcatalogue(vcf_fn, genome.v="hg38")
 } else if ((genomeBuild=='') || (genomeBuild=='hg37')) {
@@ -79,37 +80,6 @@ if (genomeBuild=='hg38') {
 sample_muts$muts$id <- paste0(sample_muts$muts$chroms, ':', sample_muts$muts$starts, '_', sample_muts$muts$wt, '/', sample_muts$muts$mt)
 rownames(sample_muts$muts) <- sample_muts$muts$id 
 
-options(repr.plot.width=22, repr.plot.height=6)
-# plot mutational profile of a given sample
-pdf(paste(plots_fp, aliquot_id, ".sigs.pdf", sep=""))
-plotSubsSignatures(sample_muts$catalogue,  add_to_titles=aliquot_id)
-dev.off()
-
-# fit the known signatures
-fit.result <- FitMS(sample_muts$catalogue,
-                   organ='Breast')
-plotFitMS(fit.result, outdir = paste0(result_path, aliquot_id, '/'))
-
-allSignatures.m <- cbind(fit.result$commonSignatures,
-                      fit.result$rareSignatures)
-
-assessed.signatures <- colnames(fit.result$exposures)
-assessed.signatures <- assessed.signatures[assessed.signatures!='unassigned']
-
-allSignatures.m <- cbind(fit.result$commonSignatures,
-                      fit.result$rareSignatures
-                      )[,assessed.signatures]
-fit.result$exposures.norm <- fit.result$exposures/sum(fit.result$exposures)
-exposure.m <- matrix(fit.result$exposures.norm[,assessed.signatures],
-                    nrow=nrow(allSignatures.m),
-                    ncol=ncol(allSignatures.m), byrow=TRUE)
-P_s_given_context <- allSignatures.m * exposure.m
-P_s_given_context_norm<- P_s_given_context/rowSums(P_s_given_context)
-
-max_sig_prob <- apply(P_s_given_context, 1, max)
-max_sig <- assessed.signatures[max.col(P_s_given_context, "first")]
-names(max_sig) <- rownames(allSignatures.m)
-
 # load the VCF file with variants
 if (genomeBuild=='hg38') {
     vcf <- readVcf(vcf_fn, genome='hg38')
@@ -117,36 +87,16 @@ if (genomeBuild=='hg38') {
     vcf <- readVcf(vcf_fn)
 }
 vcf@info$context <- sample_muts$muts[names(vcf),'context']
-vcf@info$max_sig <- max_sig[vcf@info$context ]
-
-if ('GEL-Breast_common_SBS3' %in% assessed.signatures) {
-    vcf@info$prob_SBS3 <- P_s_given_context_norm[vcf@info$context,'GEL-Breast_common_SBS3']  
-} else {
-    vcf@info$prob_SBS3 <- NA
-}
-
-if ('GEL-Breast_common_SBS1' %in% assessed.signatures) {
-    vcf@info$prob_SBS1 <- P_s_given_context_norm[vcf@info$context,'GEL-Breast_common_SBS1']  
-} else {
-    vcf@info$prob_SBS1 <- NA
-}
-
-
-
+# prepare to add additional values to the VCF file
 i = info(header(vcf))
-newInfoHeader <- data.frame(Number=c(1,1,1,1),
-                           Type=c('String', 'String', 'Float', 'Float'),
-                           Description=c('mutation context',
-                                         'most likely signature',
-                                         'probability of SBS3',
-                                         'probability of SBS1'
-                                        ))
-    
-rownames(newInfoHeader) <- c('context', 'max_sig', 'prob_SBS3', 'prob_SBS1')  
+newInfoHeader <- data.frame(Number=c(1),
+                           Type=c('String'),
+                           Description=c('mutation context'))
+rownames(newInfoHeader) <- c('context')  
 info(header(vcf)) <- rbind(i, newInfoHeader)
 
+# add the allele counts
 if (tumor.id!='') {
-        # add the allele counts
     counts_df <- data.frame(t_ref_count=sapply(geno(vcf)$AD[,tumor.id], head, 1), 
                             t_alt_count=sapply(geno(vcf)$AD[,tumor.id], tail, 1))
     i = info(header(vcf))
@@ -160,8 +110,9 @@ if (tumor.id!='') {
     info(vcf) <- cbind(info(vcf), counts_df)
 }
 
+# add the VAF field
 if (! 'VAF' %in% colnames(info(vcf))) {
-
+    # add variant allele fraction (VAF)
     i = info(header(vcf))
     newInfoHeader <- data.frame(Number=c(1),
                                Type=c('Float'),
@@ -170,15 +121,14 @@ if (! 'VAF' %in% colnames(info(vcf))) {
     rownames(newInfoHeader) <- c('VAF')  
     info(header(vcf)) <- rbind(i, newInfoHeader)
     info(vcf)$VAF <- info(vcf)$t_alt_count/(info(vcf)$t_alt_count + info(vcf)$t_ref_count)
-    
 }
 
 
 
 # if there are any variants
 if (length(vcf)>0) {
-    
 
+    # load the copy number profile, depending on the format used
     if  (grepl('.consensus.20170119.somatic.cna.annotated.txt', file)) {
         # load and plot the copy number profile
         # tab-delimited file
@@ -207,30 +157,37 @@ if (length(vcf)>0) {
         gr$minor_cn <- round(tab$minorAlleleCopyNumber)
         gr$total_cn <- gr$major_cn + gr$minor_cn
         bb <- gr
+    } else if (grepl('.RData', file)) {
+        load(file)
     }
     
     # this is the main work of the TimeR package
     # 240611 - removed  isWgd=TRUE, as some of the samples we are analyzing do not have WGD, necessarily
     mt <- mutationTime(vcf, bb, n.boot=no_bootstraps)
+    # add the inferred mutation time to the vcf file
     vcf <- addMutTime(vcf, mt$V)
     mcols(bb) <- cbind(mcols(bb),mt$T)
 
-    # add power to dectect mutations
+    # add power to detect mutations
     T <- vcf@info$MajCN + vcf@info$MinCN
-    
-    
-    rho=0.01 
+
+    # estimates of mutation detection power (not used by HRDTimer directly
+    rho=0.01 # set overdispersion
+    # total coverage per mutation
     N_vec <- vcf@info$t_ref_count +  vcf@info$t_alt_count
+    # preparing data frame for storing predicted mutation detection power
     power_df <- data.frame(N = N_vec, purity_adj = purity)
-    # CNF will take value of purity, or half of purity for subclonal mutations
+    # CNF will take value of purity, or fraction of clone with subclonal copy number change
+    # fi : expected variant allele fraction of a mutation, given purity, total copy number (T) (also accounts for subclonal mutations through CNF)
     power_df$fi = (vcf@info$CNF * vcf@info$MutCN)/(purity * T + (1-purity)*2) 
     rowFunction <- function(row, rho) {
         params <- calculate_parameters(as.numeric(row['fi']), rho, as.numeric(row['N']))
+        # probability that a mutation would be detected with 0, 1, or 2 reads, below what is detectable
         probability = dbb(0:2,  as.numeric(row['N']), params$alpha, params$beta)
+        # probability that a mutation would be detcted
         pwr <- (1-sum(probability))
     }
     powr <- apply(power_df, 1, rowFunction,rho)
-    
     vcf@info$fi <- power_df$fi
     vcf@info$powr <- powr
     # add info about new fields to the header
@@ -238,16 +195,17 @@ if (length(vcf)>0) {
                                Type=c('Float', 'Float'),
                                Description=c('expected allele fraction given inferred mutation CN', 
                                              'power to detect, given coverage at locus and expected VAF'))
-        
     rownames(newInfoHeader) <- c('fi','powr')  
     i = info(header(vcf))
     info(header(vcf)) <- rbind(i, newInfoHeader)
-
+    # the mutation detection power section is not directly used by HRDTimer
+    # it was created to evaluate the possiblity that late mutations with lower VAF would be missed
+    # but we found out that for most samples, the power to detect them is close to 100%
     
     # save the intermediate results
     save(mt, bb, vcf, file=paste(data_fp, aliquot_id, ".RData", sep=""))
 
-    # make timeR plot
+    # make MutationTimeR plot as a sample-level summary
     if ((genomeBuild=='') || (genomeBuild=='hg37')) {
         pdf(paste(plots_fp, aliquot_id, ".pdf", sep=""))
         plotSample(vcf,bb)
@@ -268,6 +226,7 @@ if (length(vcf)>0) {
         plotSampleCustom(vcf,bb, regions=regions, chrOffset=chrOffset)
         dev.off()    
     }
+    # end of the timeR plot
     
     # write the vcf file with additional columns
     vcf_out_fn <- paste(vcf_fp, aliquot_id, ".vcf", sep="")
