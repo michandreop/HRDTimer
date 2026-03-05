@@ -38,7 +38,6 @@ if (!file.exists(vcf_fp)) {
   dir.create(vcf_fp, recursive = TRUE)
 }
 # will be used the save the vcf object
-s
 plots_fp <- paste0(result_path, "/plots/")
 if (!file.exists(plots_fp)) {
   dir.create(plots_fp, recursive = TRUE)
