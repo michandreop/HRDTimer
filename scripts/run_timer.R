@@ -12,7 +12,7 @@
     file <- "/home/dg204/park_data/ICGC/CNV_all_callers_included/01658141-8398-4585-9f0f-8355dd9b0604.consensus.20170119.somatic.cna.annotated.txt"
     genomeBuild <- 'hg37'
     tumor.id <- ''
-     no_bootstraps <- 1000
+     no_bootstraps <- 100
 } else {
     args <- commandArgs(trailing = T)
     aliquot_id <- args[1]
@@ -38,7 +38,7 @@ if (!file.exists(vcf_fp)) {
   dir.create(vcf_fp, recursive = TRUE)
 }
 # will be used the save the vcf object
-
+s
 plots_fp <- paste0(result_path, "/plots/")
 if (!file.exists(plots_fp)) {
   dir.create(plots_fp, recursive = TRUE)
@@ -57,6 +57,7 @@ suppressPackageStartupMessages({
 source('utils/loadConsensusCNA.R')
 source('utils/plotBB.R')
 source('utils/plotSampleCustom.R')
+source('utils/sampleVAFPlot.R')
 
 # calculate parameters of beta-binomial distribution, given 
 # mu : expected VAF (variant allele fraction)
@@ -227,6 +228,14 @@ if (length(vcf)>0) {
         dev.off()    
     }
     # end of the timeR plot
+
+    # make a VAF plot
+    sampleVAFPlot(p=purity, #p
+                  vcf_df=as.data.frame(vcf@info), #vcf_df
+                  writePdf=TRUE, # writePdf
+                  plotFolder=plots_fp, # plotFolder
+                  sample_id=aliquot_id)
+    # end of VAF plot
     
     # write the vcf file with additional columns
     vcf_out_fn <- paste(vcf_fp, aliquot_id, ".vcf", sep="")

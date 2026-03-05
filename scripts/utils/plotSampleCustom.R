@@ -2,8 +2,6 @@
     5), layout.height = c(4, 1.2, 3.5), y.sv = ylim.cn[2] - 1, 
     chrOffset= NULL) 
 {
-    #if (is.null(regions)) 
-    #    regions <- refLengths[1:24]
      
     p <- par()
     layout(matrix(1:3, ncol = 1), height = layout.height)
@@ -36,39 +34,6 @@
     plotTimingCustom(bbb, xlim = xlim, legend = FALSE, col.grid = NA, chrOffset=chrOffset)
     
 
-    
-    #if (any(!is.na(cn$time))) {
-    #    y0 <- seq(0.005, 0.995, 0.01)
-    #    s <- .histBeta(cn)
-    #    g <- colorRampPalette(RColorBrewer::brewer.pal(4, "Set1")[c(3, 
-    #        2, 4)])(100)
-    #    segments(x0 = chrOffset["MT"], y0 = y0, x1 = chrOffset["MT"] + 
-    #        s/max(s) * 1e+08, col = g, lend = 3)
-    #    getMode <- function(s) {
-    #        if (all(is.na(s))) 
-    #            return(NA)
-    #        w <- which.max(s)
-    #        if (w %in% c(1, length(s))) {
-    #            m <- which(c(0, diff(s)) > 0 & c(diff(s), 0) < 
-    #              0)
-    #            if (length(m) == 0) 
-    #              return(w)
-    #            m <- m[which.max(s[m])]
-    #            return(if (s[w] > 2 * s[m]) w else m)
-    #        }
-    #        else return(w)
-    #    }
-    #    abline(h = y0[getMode(s)], lty = 5)
-    #    if ("time.2nd" %in% colnames(mcols(cn))) 
-    #        if (any(!is.na(cn$time.2nd))) {
-    #            s2 <- .histBeta(cn, time = "time.2nd")
-    #            segments(x0 = chrOffset["MT"] + s/max(s) * 1e+08, 
-    #              y0 = y0, x1 = chrOffset["MT"] + s/max(s) * 
-    #                1e+08 + s2/max(s) * 1e+08, col = paste0(g, 
-    #                "44"), lend = 3)
-    #            abline(h = y0[getMode(s2)], lty = 3)
-    #        }
-    #}
 
                        
     par(p[setdiff(names(p), c("cin", "cra", "csi", "cxy", "din", 
