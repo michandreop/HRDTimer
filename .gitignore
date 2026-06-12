@@ -2,10 +2,20 @@
 *.pyc
 *DS_Store
 __pycache__/
+
+# Python build / packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Claude session notes
+.claude/
 temp/
 raw_input_data/
 HRDTimer_PreProcess/
-example_data/bootstrapping
+example_data/*bootstrap*/
+example_data/*PreProcess*/
+example_data/*results*/
 to_remove/
 notebooks/paper_figures/Fig4_scNanoSeqSBS1.ipynb
 scNanoSeq_Michael/
