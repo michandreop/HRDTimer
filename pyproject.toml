@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hrdtimer"
+version = "0.1.0"
+description = "Timing of homologous recombination deficiency (HRD) and whole-genome doubling (WGD) in tumors."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Michail Andreopoulos" }]
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "tqdm",
+    "matplotlib",
+    "seaborn",
+    "vcfpy",
+]
+
+# NOTE: the dependencies above are the PyPI-installable stack. The signature /
+# bootstrap stages also need MuSiCal (GitHub tag v1.0.0) and SigProfiler; these
+# are installed by setup_environment.sh, which is the single supported install
+# path (create the env + install everything in one step).
+
+[project.urls]
+Repository = "https://github.com/michandreop/HRDTimer"
+
+[tool.setuptools.packages.find]
+where = ["src"]
