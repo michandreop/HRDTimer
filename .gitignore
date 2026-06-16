@@ -28,3 +28,28 @@ pipeline/results
 pipeline/slurm_jobs
 pipeline/instructions.txt
 .vscode
+R/
+figures/
+
+# hrdscout — keep only the overview notebook, de-identified example cells,
+# pre-computed model artefacts, and the small output CSVs needed to run it.
+# Everything else (labeled inputs, secondary notebooks, tree files, bulk outputs)
+# is excluded.
+hrdscout/input/
+hrdscout/trees_n21_Feb25/
+hrdscout/HRDScout_grouped_CV_R5.9M.ipynb
+hrdscout/HRDScout_performance_metrics.ipynb
+hrdscout/output/HRD_predictions.csv
+hrdscout/output/synthetic_training_matrix.csv
+hrdscout/output/grouped_CV_comparison_R5.9M.pdf
+hrdscout/output/metrics_comparison_R5.9M.csv
+hrdscout/output/metrics_groupedCV_R5.9M.csv
+hrdscout/output/metrics_nestedGroupedCV_R5.9M.csv
+hrdscout/output/metrics_randomCV_R5.9M.csv
+hrdscout/output/performance_table.pdf
+hrdscout/output/PR_curves_per_ratio.pdf
+hrdscout/output/PR_per_downsampling_ratio.csv
+hrdscout/output/PR_per_downsampling_ratio_reproduced.csv
+hrdscout/output/ROC_curves_per_ratio.pdf
+hrdscout/output/ROC_per_power.csv
+hrdscout/output/LABELED_synthetic_training_matrix.csv
