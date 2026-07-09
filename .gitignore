@@ -30,8 +30,9 @@ pipeline/instructions.txt
 .vscode
 R/
 # figures/ is tracked, except the following large/derived or local-only paths:
-figures/output/old/
+figures/output/
 figures/supplemental_tables_v2/Supplementary_Tables_descriptions.docx
+HRDTimer_figure_pdfs.zip
 
 # hrdscout — keep only the overview notebook, de-identified example cells,
 # pre-computed model artefacts, and the small output CSVs needed to run it.
