@@ -531,6 +531,8 @@ def plot_hrd_onset(
     lw: float = 0.25,
     fig_width_per_sample: float = 0.18,
     main_height: float = 3.5,
+    dot_size: float = 4,
+    ci_bar_width_scale: float = 1.0,
 ) -> plt.Figure:
     """Lollipop plot of HRD crossing-age (median + 90% CI) vs age at diagnosis.
 
@@ -568,7 +570,7 @@ def plot_hrd_onset(
     n  = len(df)
 
     # Bar width shrinks with more samples, capped between 0.08 and 0.2
-    bar_width = float(np.clip(0.6 / max(n, 1) ** 0.4, 0.08, 0.2))
+    bar_width = float(np.clip(0.6 / max(n, 1) ** 0.4, 0.08, 0.2)) * ci_bar_width_scale
 
     has_ann    = meta_df is not None and bool(annotations)
     n_ann_rows = len(annotations) if has_ann and annotations else 0
@@ -596,11 +598,11 @@ def plot_hrd_onset(
             color=ci_color, zorder=0, linewidth=0,
         ))
         ax_main.plot(i, row["age_at_diagnosis"], "o",
-                     color="grey", ms=4, zorder=2,
+                     color="grey", ms=dot_size, zorder=2,
                      markeredgewidth=lw, markeredgecolor="grey",
                      label="Age at diagnosis" if i == 0 else "")
         ax_main.plot(i, row[col_med], "o",
-                     color="#191970", ms=4, zorder=3,
+                     color="#191970", ms=dot_size, zorder=3,
                      markeredgewidth=lw, markeredgecolor="#191970",
                      label="HRD onset" if i == 0 else "")
 

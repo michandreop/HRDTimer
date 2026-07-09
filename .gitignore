@@ -39,6 +39,8 @@ hrdscout/input/
 hrdscout/trees_n21_Feb25/
 hrdscout/HRDScout_grouped_CV_R5.9M.ipynb
 hrdscout/HRDScout_performance_metrics.ipynb
+hrdscout/scIndelData_withNonHRD.ipynb
+hrdscout/scIndelData.ipynb
 hrdscout/output/HRD_predictions.csv
 hrdscout/output/synthetic_training_matrix.csv
 hrdscout/output/grouped_CV_comparison_R5.9M.pdf
@@ -53,3 +55,7 @@ hrdscout/output/PR_per_downsampling_ratio_reproduced.csv
 hrdscout/output/ROC_curves_per_ratio.pdf
 hrdscout/output/ROC_per_power.csv
 hrdscout/output/LABELED_synthetic_training_matrix.csv
+hrdscout/HRD
+hrdscout/HRD_main
+figures/clean_notebooks/data
+000_oficial_GEL_data
