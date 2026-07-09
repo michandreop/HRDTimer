@@ -69,7 +69,7 @@ MUSICAL_DIR=/scratch/myproject/MuSiCal bash setup_environment.sh
 
 # Usage
 
-After setting up and activating the environment (`micromamba activate hrdtimer_env`), HRDTimer can be run through the provided notebooks. A complete example workflow is available in the [example_workflow.ipynb](notebooks/example_workflow.ipynb) notebook.
+After setting up and activating the environment (`micromamba activate hrdtimer_env`), HRDTimer can be run through the provided notebooks. A complete example workflow is available in the [example_workflow.ipynb](example_workflow.ipynb) notebook.
 
 > **Note:** One of HRDTimer's preprocessing steps involves running [MutationTimeR](https://github.com/gerstung-lab/MutationTimeR) on the VCFs of interest. For simplicity, the tutorial uses preprocessed example VCFs, so this step is already applied in the example data.  
 > An example of how to implement MutationTimeR yourself can be found in the script: `/scripts/run_timer.R`.
