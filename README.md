@@ -23,8 +23,6 @@ MAMBA_ROOT_PREFIX=/scratch/myproject/micromamba "${SHELL}" <(curl -L micro.mamba
 
 After the installer finishes, open a new shell (or `source ~/.bashrc`) so the `micromamba` command is available.
 
-> **Tip (HPC users):** if your cluster restricts outbound internet access on compute nodes, run the setup script from a login node where `curl`/`git` work, then use the resulting environment on compute nodes.
-
 ## 2. Install the HRDTimer environment
 
 Clone the repo and run the setup script:

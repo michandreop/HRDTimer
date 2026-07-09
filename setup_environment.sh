@@ -96,6 +96,13 @@ PYEOF
 echo " -- Installing the HRDTimer package (editable)..."
 "$MM" run "${ENV_REF[@]}" pip install -e "$REPO_ROOT"
 
+# Sanity check the notebook-figure dependencies (shap + Bio.Phylo are used by Fig6).
+"$MM" run "${ENV_REF[@]}" python - <<'PYEOF'
+import shap, joblib
+from Bio import Phylo
+print("    OK: figure deps present -> shap", shap.__version__, "| joblib", joblib.__version__, "| biopython")
+PYEOF
+
 echo " -- Registering a Jupyter kernel (so the env shows up in VS Code / JupyterLab)..."
 "$MM" run "${ENV_REF[@]}" pip install ipykernel
 "$MM" run "${ENV_REF[@]}" python -m ipykernel install --user \
