@@ -17,7 +17,7 @@ example_data/*bootstrap*/
 example_data/*PreProcess*/
 example_data/*results*/
 to_remove/
-notebooks/paper_figures/Fig4_scNanoSeqSBS1.ipynb
+notebooks/
 scNanoSeq_Michael/
 data_scNanoSeq/
 revision/
