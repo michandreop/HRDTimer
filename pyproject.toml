@@ -9,7 +9,19 @@ description = "Timing of homologous recombination deficiency (HRD) and whole-gen
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
-authors = [{ name = "Michail Andreopoulos" }]
+authors = [{ name = "Michail Andreopoulos", email = "michail.andreopoulos@gmail.com" }]
+keywords = ["bioinformatics", "cancer genomics", "HRD", "WGD", "mutation timing", "signatures"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
     "numpy",
     "pandas",
@@ -20,13 +32,25 @@ dependencies = [
     "vcfpy",
 ]
 
-# NOTE: the dependencies above are the PyPI-installable stack. The signature /
-# bootstrap stages also need MuSiCal (GitHub tag v1.0.0) and SigProfiler; these
-# are installed by setup_environment.sh, which is the single supported install
-# path (create the env + install everything in one step).
+# The core dependencies above are the PyPI-installable stack. Signature fitting
+# additionally requires:
+#   * SigProfilerAssignment + SigProfilerMatrixGenerator -- the `signatures`
+#     extra below (`pip install hrdtimer[signatures]`).
+#   * MuSiCal (GitHub tag v1.0.0) -- NOT on PyPI. Install EDITABLE from a clone;
+#     a plain `pip install git+...` drops its undeclared musical/data/*.csv files:
+#       git clone --branch v1.0.0 https://github.com/parklab/MuSiCal.git
+#       pip install -e MuSiCal
+#   * Reference genomes -- run `hrdtimer-install-genomes` once after install.
+# setup_environment.sh performs all of these in one step for HPC/conda users.
+[project.optional-dependencies]
+signatures = ["SigProfilerAssignment", "SigProfilerMatrixGenerator"]
+
+[project.scripts]
+hrdtimer-install-genomes = "hrdtimer.install_data:main"
 
 [project.urls]
 Repository = "https://github.com/michandreop/HRDTimer"
+Homepage = "https://github.com/michandreop/HRDTimer"
 
 [tool.setuptools.packages.find]
 where = ["src"]
