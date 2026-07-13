@@ -33,8 +33,9 @@ class SignatureCatalog:
         is_mmrd: bool = False,
         is_ppd: bool = False,
     ) -> None:
-        import musical  # lazy import: only needed when signatures are fit
+        from ._optional import require  # lazy: only needed when signatures are fit
 
+        musical = require("musical")
         catalog = musical.load_catalog(catalog_name)
         catalog.restrict_catalog(tumor_type=tumor_type, is_MMRD=is_mmrd, is_PPD=is_ppd)
         self.tumor_type = tumor_type
@@ -52,8 +53,9 @@ class SignatureCatalog:
 
         Returns the ``(H, model)`` tuple from :func:`musical.refit.refit`.
         """
-        import musical
+        from ._optional import require
 
+        musical = require("musical")
         W = self.W.reindex(counts.index)
         return musical.refit.refit(counts, W, method=method, thresh=thresh)
 

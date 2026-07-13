@@ -37,6 +37,9 @@ class SignatureAnalyzer:
 
     def run(self, parent_folder: str) -> None:
         """For each clonality subfolder: assign signatures, refit, save probs."""
+        from ._optional import require
+
+        require("SigProfilerAssignment")
         from SigProfilerAssignment import Analyzer as Analyze
 
         for subfolder in CLONALITY_CLASSES:
