@@ -61,3 +61,10 @@ hrdscout/HRD
 hrdscout/HRD_main
 figures/clean_notebooks/data
 000_oficial_GEL_data
+# Re-revision working directory (Aug 2026) — regenerable, kept local only
+000_re_revision_Aug26/
+
+# Superseded by src/hrdtimer/ (the package declared in pyproject.toml).
+# Copies kept locally in to_remove/, not shipped.
+/hrdtimer/
+/pipeline_old/
