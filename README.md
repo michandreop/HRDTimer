@@ -80,3 +80,21 @@ The `example_workflow.ipynb` demonstrates typical HRDTimer analyses using the `e
 - **Bootstrapping:** Estimating confidence in mutational signature analysis
 - **Timing analyses:** Inferring the timing of Whole-Genome Duplication (WGD) and the onset of Homologous Recombination Deficiency (HRD) on a molecular time scale
 - **Age translation:** Converting molecular timing to human age using inferred SBS1 acceleration models
+
+# HRDScout
+
+HRDScout is the random-forest classifier that assigns HRD probabilities to individual cells
+profiled by scNanoSeq. Its notebooks live in [hrdscout/](hrdscout/):
+
+- [`HRDScout_classifier_overview.ipynb`](hrdscout/HRDScout_classifier_overview.ipynb) —
+  training-set construction, the classifier itself, and stratified 10-fold cross-validation.
+- [`HRDScout_grouped_nested_CV.ipynb`](hrdscout/HRDScout_grouped_nested_CV.ipynb) —
+  grouped cross-validation keyed on the original PCAWG tumour (`StratifiedGroupKFold`), so
+  that all downsampled replicates of a tumour are confined to one fold, plus nested grouped
+  cross-validation for operating-point selection. Reports the train/test tumour-overlap
+  audit and the metric panel under random, grouped and nested-grouped CV side by side.
+
+> The labelled synthetic training matrix (`hrdscout/output/LABELED_synthetic_training_matrix.csv`)
+> is excluded from version control because it is derived from restricted PCAWG data. Both
+> notebooks retain the cell outputs from the runs reported in the manuscript; place the matrix
+> in `hrdscout/output/` to re-execute them.
