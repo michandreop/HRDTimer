@@ -108,9 +108,6 @@ If you use HRDTimer or HRDScout, please cite:
 > recombination deficiency before breast cancer diagnosis.* bioRxiv (2026).
 > doi:[10.1101/2025.10.17.683157](https://doi.org/10.1101/2025.10.17.683157)
 
-A `CITATION.cff` file is included, so GitHub's "Cite this repository" button
-generates APA and BibTeX entries directly.
-
 ## License
 
 Released under the [MIT License](LICENSE).
