@@ -72,7 +72,7 @@ def _cpg_frame(p_gain: float, n: int = 50) -> pd.DataFrame:
 )
 def test_wgd_timing_matches_closed_form(p_gain, expected):
     """WGD molecular time follows Eq. 5 exactly for a uniform multiplicity posterior."""
-    t, _ = TimingEstimator._wgd_single_bootstrap(_cpg_frame(p_gain))
+    t, _ = TimingEstimator.wgd_time_from_replicate(_cpg_frame(p_gain))
     assert t == pytest.approx(expected, abs=1e-12)
 
 
@@ -85,6 +85,12 @@ def test_timing_is_an_expectation_not_a_hard_call():
     """
     mixed = pd.concat([_cpg_frame(1.0, 25), _cpg_frame(0.0, 25)], ignore_index=True)
     uncertain = _cpg_frame(0.5, 50)
-    t_mixed, _ = TimingEstimator._wgd_single_bootstrap(mixed)
-    t_uncertain, _ = TimingEstimator._wgd_single_bootstrap(uncertain)
+    t_mixed, _ = TimingEstimator.wgd_time_from_replicate(mixed)
+    t_uncertain, _ = TimingEstimator.wgd_time_from_replicate(uncertain)
     assert t_mixed == pytest.approx(t_uncertain, abs=1e-12)
+
+
+def test_private_aliases_still_resolve():
+    """Scripts written against the pre-rename private names keep working."""
+    assert TimingEstimator._wgd_single_bootstrap is TimingEstimator.wgd_time_from_replicate
+    assert TimingEstimator._hrd_single_bootstrap is TimingEstimator.hrd_time_from_replicate

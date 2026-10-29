@@ -73,14 +73,14 @@ class TimingEstimator:
             df = pd.read_csv(path)
 
             # --- WGD (single read) ---
-            wgd_mean, n_cpg = self._wgd_single_bootstrap(df)
+            wgd_mean, n_cpg = self.wgd_time_from_replicate(df)
             n_mut_cpg_total += n_cpg
             if not np.isnan(wgd_mean):
                 wgd_means.append(wgd_mean)
 
             # --- HRD (same read) ---
             (t_values, n_mut, cavg, c_list, pi2_1, pi2_3,
-             nt1, nt3, pi1_1, pi1_3) = self._hrd_single_bootstrap(df)
+             nt1, nt3, pi1_1, pi1_3) = self.hrd_time_from_replicate(df)
             t_arr = np.asarray(t_values, dtype=float)
             n_arr = np.asarray(n_mut, dtype=float)
             mask = ~np.isnan(t_arr)
@@ -105,7 +105,7 @@ class TimingEstimator:
 
     # -- per-replicate WGD ---------------------------------------------------
     @staticmethod
-    def _wgd_single_bootstrap(df: pd.DataFrame) -> tuple[float, np.ndarray]:
+    def wgd_time_from_replicate(df: pd.DataFrame) -> tuple[float, np.ndarray]:
         """One replicate's CpG-clock WGD time; also returns per-state CpG counts."""
         df = df[df["SBS96"].isin(CPG_CONTEXTS)]
         t_values = []
@@ -142,7 +142,7 @@ class TimingEstimator:
 
     # -- per-replicate HRD ---------------------------------------------------
     @staticmethod
-    def _hrd_single_bootstrap(df: pd.DataFrame):
+    def hrd_time_from_replicate(df: pd.DataFrame):
         """One replicate's HRD timing across MinCN states (SBS3-corrected SBS1).
 
         Faithful port of the second ``calculate_hrd_time_single_boot``.
@@ -225,6 +225,12 @@ class TimingEstimator:
             [res[k]["pi_1_SBS1"] for k in order],
             [res[k]["pi_1_SBS3"] for k in order],
         )
+
+    # -- backwards-compatible aliases ----------------------------------------
+    # These were the private names before the per-replicate estimators became
+    # part of the public API. Kept so existing analysis scripts keep working.
+    _wgd_single_bootstrap = wgd_time_from_replicate
+    _hrd_single_bootstrap = hrd_time_from_replicate
 
     # -- aggregation ---------------------------------------------------------
     @staticmethod

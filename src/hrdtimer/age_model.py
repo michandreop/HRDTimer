@@ -18,6 +18,7 @@ verified numerically identical to the original.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from typing import Dict, List, Optional, Tuple
@@ -28,6 +29,8 @@ from scipy.interpolate import interp1d
 from scipy.optimize import least_squares
 from scipy.stats import gaussian_kde
 from scipy.stats import norm as sp_norm
+
+logger = logging.getLogger(__name__)
 
 from .constants import DEFAULT_AGE_CONFIG
 
@@ -121,7 +124,10 @@ def fit_midpoint(
             residuals, [age * 0.5], bounds=(0, age), method="trf", max_nfev=200
         )
         return (float(result.x[0]), rd) if result.cost < 1e-3 else (None, None)
-    except Exception:
+    except (ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
+        # Non-convergence is handled by the result.cost test above; reaching
+        # here means the solve itself failed (e.g. degenerate bounds).
+        logger.debug("fit_midpoint failed (%s): %s", type(exc).__name__, exc)
         return None, None
 
 
@@ -135,7 +141,8 @@ def find_burden_crossing(
             [age * 0.5], bounds=(0, age), method="trf", max_nfev=200,
         )
         return float(result.x[0]) if result.cost < 1e-4 else np.nan
-    except Exception:
+    except (ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
+        logger.debug("find_burden_crossing failed (%s): %s", type(exc).__name__, exc)
         return np.nan
 
 
