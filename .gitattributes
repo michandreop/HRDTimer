@@ -1,0 +1,7 @@
+# Notebooks are documentation and worked examples, not the library. They carry
+# embedded output images and would otherwise account for ~99% of the repository
+# by byte count, hiding the Python package in src/hrdtimer.
+*.ipynb linguist-documentation
+
+# Bundled outputs, not source.
+HRDTimer_figure_pdfs.zip linguist-vendored
