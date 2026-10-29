@@ -1,6 +1,9 @@
 # HRDTimer
 
 [![CI](https://github.com/michandreop/HRDTimer/actions/workflows/ci.yml/badge.svg)](https://github.com/michandreop/HRDTimer/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![DOI](https://img.shields.io/badge/bioRxiv-10.1101%2F2025.10.17.683157-b31b1b)](https://doi.org/10.1101/2025.10.17.683157)
 
 A computational toolkit for estimating the timing of homologous recombination deficiency (HRD) in whole-genome–duplicated tumors.
 
