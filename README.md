@@ -1,5 +1,7 @@
 # HRDTimer
 
+[![CI](https://github.com/michandreop/HRDTimer/actions/workflows/ci.yml/badge.svg)](https://github.com/michandreop/HRDTimer/actions/workflows/ci.yml)
+
 A computational toolkit for estimating the timing of homologous recombination deficiency (HRD) in whole-genome–duplicated tumors.
 
 ## Installation

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  install-and-test:
+    name: Clean install (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Installs from a clean checkout with no pre-existing environment,
+      # using only the PyPI dependencies declared in pyproject.toml.
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Import from outside the source tree
+        working-directory: ${{ runner.temp }}
+        run: python -c "import hrdtimer; print(hrdtimer.__version__)"
+
+      - name: Console script is on PATH
+        run: hrdtimer-install-genomes --help
+
+      - name: Run smoke tests
+        run: |
+          python -m pip install pytest
+          python -m pytest tests -q
