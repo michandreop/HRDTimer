@@ -73,3 +73,9 @@ figures/clean_notebooks/data
 HRDTimer_manuscript.pdf
 00_HRDTimer_Supplementary_Information.pdf
 HRDTimer Point-by-point*.pdf
+
+# Superseded analyses, kept locally for reference but not published.
+data/output/to_delete/
+
+# Jupyter autosave clutter.
+.ipynb_checkpoints/
