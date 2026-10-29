@@ -68,3 +68,8 @@ figures/clean_notebooks/data
 # Copies kept locally in to_remove/, not shipped.
 /hrdtimer/
 /pipeline_old/
+
+# Manuscript drafts and reviewer correspondence — local only, never published.
+HRDTimer_manuscript.pdf
+00_HRDTimer_Supplementary_Information.pdf
+HRDTimer Point-by-point*.pdf
