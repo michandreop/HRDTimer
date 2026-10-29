@@ -2,11 +2,11 @@
 
 A computational toolkit for estimating the timing of homologous recombination deficiency (HRD) in whole-genome–duplicated tumors.
 
-# Installation
+## Installation
 
 HRDTimer uses [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html) to manage its environment. micromamba is a fast, standalone conda-compatible package manager with no base environment overhead — it is recommended over full Anaconda/Miniconda installs.
 
-## 1. Install micromamba (if you don't have it)
+### 1. Install micromamba (if you don't have it)
 
 Run the official one-liner installer:
 
@@ -23,7 +23,7 @@ MAMBA_ROOT_PREFIX=/scratch/myproject/micromamba "${SHELL}" <(curl -L micro.mamba
 
 After the installer finishes, open a new shell (or `source ~/.bashrc`) so the `micromamba` command is available.
 
-## 2. Install the HRDTimer environment
+### 2. Install the HRDTimer environment
 
 Clone the repo and run the setup script:
 
@@ -67,12 +67,12 @@ Example:
 MUSICAL_DIR=/scratch/myproject/MuSiCal bash setup_environment.sh
 ```
 
-# Usage
+## Usage
 
 After setting up and activating the environment (`micromamba activate hrdtimer_env`), HRDTimer can be run through the provided notebooks. A complete example workflow is available in the [example_workflow.ipynb](example_workflow.ipynb) notebook.
 
 > **Note:** One of HRDTimer's preprocessing steps involves running [MutationTimeR](https://github.com/gerstung-lab/MutationTimeR) on the VCFs of interest. For simplicity, the tutorial uses preprocessed example VCFs, so this step is already applied in the example data.  
-> An example of how to implement MutationTimeR yourself can be found in the script: `/scripts/run_timer.R`.
+> An example of how to implement MutationTimeR yourself can be found in the script: `scripts/run_timer.R`.
 
 The `example_workflow.ipynb` demonstrates typical HRDTimer analyses using the `example_data/` VCF files, including:
 
@@ -81,7 +81,7 @@ The `example_workflow.ipynb` demonstrates typical HRDTimer analyses using the `e
 - **Timing analyses:** Inferring the timing of Whole-Genome Duplication (WGD) and the onset of Homologous Recombination Deficiency (HRD) on a molecular time scale
 - **Age translation:** Converting molecular timing to human age using inferred SBS1 acceleration models
 
-# HRDScout
+## HRDScout
 
 HRDScout is the random-forest classifier that assigns HRD probabilities to individual cells
 profiled by scNanoSeq. Its notebooks live in [hrdscout/](hrdscout/):
@@ -98,3 +98,19 @@ profiled by scNanoSeq. Its notebooks live in [hrdscout/](hrdscout/):
 > is excluded from version control because it is derived from restricted PCAWG data. Both
 > notebooks retain the cell outputs from the runs reported in the manuscript; place the matrix
 > in `hrdscout/output/` to re-execute them.
+
+## Citation
+
+If you use HRDTimer or HRDScout, please cite:
+
+> Andreopoulos M, Niu M, Zhang Y, Viswanadham VV, Gulhan DC, Jin H, Batalini F,
+> Wulf G, Zong C, Park PJ, Glodzik D. *Timing the onset of homologous
+> recombination deficiency before breast cancer diagnosis.* bioRxiv (2026).
+> doi:[10.1101/2025.10.17.683157](https://doi.org/10.1101/2025.10.17.683157)
+
+A `CITATION.cff` file is included, so GitHub's "Cite this repository" button
+generates APA and BibTeX entries directly.
+
+## License
+
+Released under the [MIT License](LICENSE).

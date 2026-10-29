@@ -1,0 +1,62 @@
+cff-version: 1.2.0
+title: HRDTimer
+message: >-
+  If you use this software, please cite the preprint below.
+type: software
+authors:
+  - family-names: Andreopoulos
+    given-names: Michail
+  - family-names: Niu
+    given-names: Muchun
+  - family-names: Zhang
+    given-names: Yang
+  - family-names: Viswanadham
+    given-names: Vinayak V.
+  - family-names: Gulhan
+    given-names: Doga C.
+  - family-names: Jin
+    given-names: Hu
+  - family-names: Batalini
+    given-names: Felipe
+  - family-names: Wulf
+    given-names: Gerburg
+  - family-names: Zong
+    given-names: Chenghang
+  - family-names: Park
+    given-names: Peter J.
+  - family-names: Glodzik
+    given-names: Dominik
+repository-code: https://github.com/michandreop/HRDTimer
+license: MIT
+preferred-citation:
+  type: article
+  title: >-
+    Timing the onset of homologous recombination deficiency before breast
+    cancer diagnosis
+  authors:
+    - family-names: Andreopoulos
+      given-names: Michail
+    - family-names: Niu
+      given-names: Muchun
+    - family-names: Zhang
+      given-names: Yang
+    - family-names: Viswanadham
+      given-names: Vinayak V.
+    - family-names: Gulhan
+      given-names: Doga C.
+    - family-names: Jin
+      given-names: Hu
+    - family-names: Batalini
+      given-names: Felipe
+    - family-names: Wulf
+      given-names: Gerburg
+    - family-names: Zong
+      given-names: Chenghang
+    - family-names: Park
+      given-names: Peter J.
+    - family-names: Glodzik
+      given-names: Dominik
+  journal: bioRxiv
+  year: 2026
+  doi: 10.1101/2025.10.17.683157
+  url: https://www.biorxiv.org/content/10.1101/2025.10.17.683157v2
