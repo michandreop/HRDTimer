@@ -9,7 +9,7 @@ description = "Timing of homologous recombination deficiency (HRD) and whole-gen
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
-authors = [{ name = "Michail Andreopoulos", email = "michail.andreopoulos@gmail.com" }]
+authors = [{ name = "Michail Andreopoulos", email = "michail_andreopoulos@g.harvard.edu" }]
 keywords = ["bioinformatics", "cancer genomics", "HRD", "WGD", "mutation timing", "signatures"]
 classifiers = [
     "Development Status :: 4 - Beta",
